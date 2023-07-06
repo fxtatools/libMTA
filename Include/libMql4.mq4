@@ -4,11 +4,15 @@
 //|                                      https://www.example.com/nop |
 //+------------------------------------------------------------------+
 
+#ifndef __MQLBUILD__
+#include <MQLsyntax.mqh>
+#endif
+
 #property copyright "Copyright 2023, Sean Champ"
 #property link      "https://www.example.com/nop"
 #property strict
 
-bool debug = false;
+extern bool debug = true;
 
 union Timeframe
 {
