@@ -40,3 +40,16 @@ public:
     Chartable(string s) : symbol(s), timeframe(_Period){};
     Chartable(string s, ENUM_TIMEFRAMES tframe) : symbol(s), timeframe(tframe){};
 };
+
+/**
+ * Return the time at a given offset, as a single datetime value
+ **/
+datetime offset_time(int shift)
+{
+    ENUM_TIMEFRAMES timeframe = cur_timeframe;
+    string symbol = cur_symbol;
+
+    datetime dtbuff[1];
+    CopyTime(symbol, timeframe, shift, 1, dtbuff);
+    return dtbuff[0];
+}
