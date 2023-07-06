@@ -15,13 +15,21 @@
 #property show_inputs
 #property strict
 
-input int input_period = 30;
-input ENUM_APPLIED_PRICE input_price_kind = PRICE_TYPICAL;
+input int adx_period = 30;
+input ENUM_APPLIED_PRICE adx_price_kind = PRICE_TYPICAL;
+input int sto_k = 30;
+input int sto_d = 10;
+input int sto_slowing = 5;
+input ENUM_MA_METHOD sto_ma = MODE_LWMA;
+// sto_mode_lowhigh: input flag for iStochastic price mode
+input bool sto_mode_lowhigh = true;
 input bool debug = false;
 
 static int nr_bars;
 static string cur_symbol;
 static ENUM_TIMEFRAMES cur_timeframe;
+
+static int sto_price = sto_mode_lowhigh ? 0 : 1;
 
 double adx_plusdi[];
 double adx_minusdi[];
@@ -128,7 +136,7 @@ void OnStart()
     ArrayResize(adx_plusdi, nr_bars);
     ArrayResize(adx_minusdi, nr_bars);
 
-    XoverBuf xovers = XoverBuf(nr_bars, cur_symbol, cur_timeframe); 
+    XoverBuf adx_xover = XoverBuf(nr_bars, cur_symbol, cur_timeframe); 
 
     if (nr_bars == 0)
     {
@@ -141,24 +149,25 @@ void OnStart()
     }
 
     fill_buff(0);
-    int pre = 0;
+    int next = 0;
     bool xover = false;
     bool sell_trend = false;
-    double plus_cur, minus_cur, plus_pre, minus_pre;
+    double plus_cur, minus_cur, plus_next, minus_next, ratio_next;
+
     for (int n = 1; n < nr_bars; n++)
     {
         fill_buff(n);
         plus_cur = adx_plusdi[n];
         minus_cur = adx_minusdi[n];
-        plus_pre = adx_plusdi[pre];
-        minus_pre = adx_minusdi[pre];
+        plus_next = adx_plusdi[next];
+        minus_next = adx_minusdi[next];
 
-        if ((plus_pre > minus_pre) && (plus_cur < minus_cur))
+        if ((plus_next > minus_next) && (plus_cur < minus_cur))
         {
             xover = true;
             sell_trend = false;
         }
-        else if ((plus_pre < minus_pre) && (plus_cur > minus_cur))
+        else if ((plus_next < minus_next) && (plus_cur > minus_cur))
         {
             xover = true;
             sell_trend = true;
@@ -170,30 +179,53 @@ void OnStart()
 
         if (xover)
         {
-            datetime time_cur = time_for(n);
-            datetime time_pre = time_for(pre);
-            xovers.plot_xover(time_pre, time_cur, sell_trend);
-            if (debug) Alert(StringFormat("Found crossover: %s <> %s", TimeToStr(time_cur), TimeToStr(time_pre)));
+            int next_sto_x = next_sto_xover(n);
+            if (next_sto_x == -1 ) {
+                // detect convergence in the ADX +DI, -DI values across N=1, N=0
+                ratio_next = MathAbs((adx_plus(1) - adx_minus(1)) / (adx_plus(0) - adx_minus(0)));
+                if(debug) Alert("Ratio next ", ratio_next);
+                if (ratio_next < 1)  {
+                    // no crossover cancellation found
+                    datetime time_cur = time_for(n);
+                    datetime time_next = time_for(next);
+                    adx_xover.plot_xover(time_cur, time_next, sell_trend);
+                    if (debug) Alert(StringFormat("Found crossover: %s <> %s", TimeToStr(time_cur), TimeToStr(time_next)));
+                }
+            }
+            break;
         }
 
-        pre = n;
+        next = n;
     }
 
-    Alert("Number of crossovers: ", xovers.nr_xover);
+    // Alert("Number of crossovers: ", adx_xover.nr_xover);
 
-    if (xovers.nr_xover > 0)
+    if (adx_xover.nr_xover > 0)
     {
-        string trend = xovers.xover_sell[0] ? "Sell": "Buy";
-        Alert(StringFormat("Nearest crossover (%s): %s", trend, TimeToStr(xovers.xover_start[0])));
+        string trend = adx_xover.xover_sell[0] ? "Sell": "Buy";
+        Alert(StringFormat("Nearest active crossover in %s %d (%s): %s", cur_symbol, cur_timeframe, trend, TimeToStr(adx_xover.xover_start[0])));
+    } else {
+        Alert(StringFormat("No active crossover in %s %d ", cur_symbol, cur_timeframe));
     }
 }
 
+double adx_value(int shift, int mode) {
+    return iADX(cur_symbol, cur_timeframe, adx_period, adx_price_kind, mode, shift);
+}
+
+double adx_plus(int shift) {
+    return adx_value(shift, MODE_PLUSDI);
+}
+double adx_minus(int shift) {
+    return adx_value(shift, MODE_MINUSDI);
+}
+
+
+
 void fill_buff(int shift)
 {
-    ENUM_TIMEFRAMES timeframe = cur_timeframe;
-    string symbol = cur_symbol;
-    adx_plusdi[shift] = iADX(symbol, timeframe, input_period, input_price_kind, MODE_PLUSDI, shift);
-    adx_minusdi[shift] = iADX(symbol, timeframe, input_period, input_price_kind, MODE_MINUSDI, shift);
+    adx_plusdi[shift] = adx_plus(shift);
+    adx_minusdi[shift] = adx_minus(shift);
 }
 
 datetime time_for(int shift)
@@ -206,9 +238,37 @@ datetime time_for(int shift)
     return dtbuff[0];
 }
 
-/*
-datetime find_nearest_xover()
-{
+int next_sto_xover(int shift) {
+        static int no_match = -1;
+        if ( shift == 0 ) {
+            return no_match;
+        }
+        int next = 0;
+        double sto_sto_cur, sto_sto_next, sto_snl_cur, sto_snl_next;
+        // initialize values for the compiler
+        sto_sto_cur = 0.0;
+        sto_snl_cur = 0.0;
+        sto_sto_next = 0.0;
+        sto_snl_next = 0.0;
+        for (int n = shift; n > 0; n--) {
+            next = n - 1;
+            sto_sto_cur = iStochastic(cur_symbol, cur_timeframe, sto_k, sto_d, sto_slowing, sto_ma, sto_price, MODE_MAIN, n);
+            sto_snl_cur = iStochastic(cur_symbol, cur_timeframe, sto_k, sto_d, sto_slowing, sto_ma, sto_price, MODE_SIGNAL, n);
+            sto_sto_next = iStochastic(cur_symbol, cur_timeframe, sto_k, sto_d, sto_slowing, sto_ma, sto_price, MODE_MAIN, next);
+            sto_snl_next= iStochastic(cur_symbol, cur_timeframe, sto_k, sto_d, sto_slowing, sto_ma, sto_price, MODE_SIGNAL, next);
+            if (((sto_sto_cur < sto_snl_cur) && (sto_sto_next > sto_snl_next)) ||
+                ((sto_sto_cur > sto_snl_cur) && (sto_sto_next < sto_snl_next)))
+            { 
+                return next;
+            }
+        }
 
+        // detect a convergence of the main and signal lines past n == 1
+        double sto_ratio = MathAbs((sto_sto_cur - sto_snl_cur) / (sto_sto_next - sto_snl_next));
+        if (sto_ratio < 1) {
+            return next;
+        } else {
+            return no_match;
+        }
 }
-*/
+
