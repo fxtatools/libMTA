@@ -8,6 +8,8 @@
 #include <MQLsyntax.mqh>
 #endif
 
+#include <libMql4.mq4>
+
 #property copyright "Copyright 2023, Sean Champ."
 #property link "https://www.example.com/nop"
 #property version "1.00"
@@ -33,33 +35,6 @@ static int sto_price = sto_mode_lowhigh ? 0 : 1;
 
 double adx_plusdi[];
 double adx_minusdi[];
-
-union Timeframe
-{
-    ENUM_TIMEFRAMES timeframe;
-    int period;
-
-public:
-    Timeframe() : period(_Period){};
-    Timeframe(int duration) : period(duration){};
-    Timeframe(ENUM_TIMEFRAMES tframe) : timeframe(tframe){};
-};
-
-class Chartable
-{
-protected:
-    string symbol;
-    Timeframe timeframe;
-
-public:
-    Chartable() : symbol(_Symbol), timeframe(_Period)
-    {
-        if (debug) Alert(StringFormat("Initialized charatble: %s %d", symbol, timeframe.period));
-    };
-    Chartable(ENUM_TIMEFRAMES tframe) : symbol(_Symbol), timeframe(tframe){};
-    Chartable(string s) : symbol(s), timeframe(_Period){};
-    Chartable(string s, ENUM_TIMEFRAMES tframe) : symbol(s), timeframe(tframe){};
-};
 
 class XoverBuf : public Chartable
 {
