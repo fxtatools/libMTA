@@ -12,6 +12,10 @@
 #property link      "https://www.example.com/nop"
 #property strict
 
+#ifndef dbg
+#define dbg Alert
+#endif
+
 extern bool debug = true;
 
 union Timeframe
@@ -34,7 +38,7 @@ protected:
 public:
     Chartable() : symbol(_Symbol), timeframe(_Period)
     {
-        if (debug) Alert(StringFormat("Initialized charatble: %s %d", symbol, timeframe.period));
+        if (debug) dbg(StringFormat("Initialized charatble: %s %d", symbol, timeframe.period));
     };
     Chartable(ENUM_TIMEFRAMES tframe) : symbol(_Symbol), timeframe(tframe){};
     Chartable(string s) : symbol(s), timeframe(_Period){};

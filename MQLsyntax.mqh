@@ -1,4 +1,4 @@
-//#include <MQLsyntax.mqh>
+// #include <MQLsyntax.mqh>
 
 // https://c.mql5.com/3/176/MQLsyntax.mqh
 // via
@@ -15,14 +15,223 @@
 //
 // MQL5, novel indicators included: https://www.mql5.com/en/docs/function_indices
 
-#define input 
-#define uchar unsigned char 
-#define ushort unsigned short 
-#define uint unsigned int 
-#define color int 
-#define ulong unsigned long 
-#define datetime unsigned long 
-#define string  
+#ifndef _MQL_SYNTAX_
+
+#define _MQL_SYNTAX_
+
+#include <stdio.h>
+
+/**
+ * String Functions (FIXME)
+ **/
+
+//// HACK:
+#define StringFormat(s, ...) s
+
+//// HACK:
+#define Print(...) __VA_ARGS__
+
+#define PrintFormat(s, ...) printf(s, __VA_ARGS__)
+
+//// HACK:
+#define Alert(...) Print(__VA_ARGS__)
+
+/**
+ * Type Definitions
+ **/
+
+typedef unsigned char uchar;
+typedef unsigned short ushort;
+typedef unsigned int uint;
+typedef int color;
+typedef unsigned long ulong;
+typedef unsigned long datetime;
+typedef const char *string;
+
+/**
+ * Time
+ */
+
+enum ENUM_TIMEFRAMES
+{
+    PERIOD_CURRENT = 0,
+    PERIOD_M1 = 1,
+    PERIOD_M5 = 5,
+    PERIOD_M15 = 15,
+    PERIOD_M30 = 30,
+    PERIOD_H1 = 60,
+    PERIOD_H4 = 240,
+    PERIOD_D1 = 1440,
+    PERIOD_W1 = 10080,
+    PERIOD_MN1 = 43200
+};
+
+enum _TIME
+{
+    TIME_DATE = 1,
+    TIME_MINUTES = 2,
+    TIME_SECONDS = 4
+};
+
+string TimeToStr(datetime dt, int mode = TIME_DATE | TIME_MINUTES);
+
+int CopyTime(string symbol, int timeframe, int start, int count, datetime times[]);
+
+/**
+ * Charts
+ **/
+
+int _Period;
+string _Symbol;
+
+enum ENUM_TIMEFRAMES ChartPeriod(long chart_id = 0L);
+const string ChartSymbol(long chart_id = 0L);
+
+/**
+ * Graphical Objects
+ **/
+
+#define clrNONE -1
+#define CLR_NONE clrNONE
+
+/**
+ * Orders
+ **/
+
+double Bid;
+double Ask;
+int OP_SELL;
+int OP_BUY;
+
+bool OrderClose(int ticket, double lots, double price, int slippage, color arrow_color);
+
+bool OrderCloseBy(int ticket, int opposite, color arrow_color);
+
+double OrderClosePrice();
+
+datetime OrderCloseTime();
+
+const string OrderComment();
+
+double OrderCommission();
+
+bool OrderDelete(int ticket, color arrow_color);
+
+datetime OrderExpiration();
+
+double OrderLots();
+
+int OrderMagicNumber();
+
+bool OrderModify(int ticket, double price, double stoploss, double takeprofit, datetime expiration, color arrow_color);
+
+double OrderOpenPrice();
+
+datetime OrderOpenTime();
+
+void OrderPrint();
+
+double OrderProfit();
+
+enum _ORDER_SELECT_FLAG
+{
+    SELECT_BY_POS,
+    SELECT_BY_TICKET
+};
+
+enum _ORDER_SELECT_POOL
+{
+    MODE_TRADES,
+    MODE_HISTORY
+};
+
+bool OrderSelect(int index, int select, int pool = MODE_TRADES);
+
+int OrderSend(
+    string symbol,
+    int cmd,
+    double volume,
+    double price,
+    int slippage,
+    double stoploss,
+    double takeprofit,
+    string comment = NULL,
+    int magic = 0,
+    datetime expiration = 0,
+    color arrow_color = clrNONE);
+
+int OrdersHistoryTotal();
+
+double OrderStopLoss();
+
+int OrdersTotal();
+
+double OrderSwap();
+
+const string OrderSymbol();
+
+double OrderTakeProfit();
+
+int OrderTicket();
+
+enum _ORDER_TYPE
+{
+    OP_BUY,
+    OP_SELL,
+    OP_BUYLIMIT,
+    OP_BUYSTOP,
+    OP_SELLLIMIT,
+    OP_SELLSTOP,
+};
+
+enum _ORDER_TYPE OrderType();
+
+/**
+ * Mathematical Operations
+ **/
+
+double MathAbs(double value);
+
+/**
+ * Indicators
+ **/
+
+int iBars(const string symbol, int timeframe);
+int iBarShift(const string symbol, int timeframe, datetime time, bool exact = false);
+
+// #define ENUM_MA_KIND ...
+
+enum ENUM_APPLIED_PRICE
+{
+    PRICE_CLOSE,
+    PRICE_OPEN,
+    PRICE_HIGH,
+    PRICE_LOW,
+    PRICE_MEDIAN,
+    PRICE_TYPICAL,
+    PRICE_WEIGHTED
+};
+
+// FIXME testing with iADXWilder ...
+enum _ADX_MODE
+{
+    MODE_MAIN,
+    MODE_PLUSDI,
+    MODE_MINUSDI
+};
+
+double iADX(string &symbol, int timeframe, int period, int applied_price, _ADX_MODE mode, int shift);
+
+/**
+ * MQL Programs
+ */
+
+#define input(type, expr)
+
+/**
+ * Batch from contrib
+ */
+
 // #define MqlRates int
 #define COLOR_FORMAT_ARGB_RAW 0
 #define COLOR_FORMAT_XRGB_NOALPHA 0
@@ -259,7 +468,7 @@
 #define clrMoccasin 0
 #define clrNavajoWhite 0
 #define clrNavy 0
-#define clrNONE 0
+// #define clrNONE 0
 #define clrOldLace 0
 #define clrOlive 0
 #define clrOliveDrab 0
@@ -350,7 +559,7 @@
 #define DEAL_TYPE 0
 #define DEAL_TYPE_BALANCE 0
 #define DEAL_TYPE_BONUS 0
-#define DEAL_TYPE_BUY  0
+#define DEAL_TYPE_BUY 0
 #define DEAL_TYPE_BUY_CANCELED 0
 #define DEAL_TYPE_CHARGE 0
 #define DEAL_TYPE_COMMISSION 0
@@ -475,7 +684,7 @@
 #define ERR_MARKET_SELECT_ERROR 0
 #define ERR_MARKET_UNKNOWN_SYMBOL 0
 #define ERR_MARKET_WRONG_PROPERTY 0
-#define ERR_MQL5_WRONG_PROPERTY  0
+#define ERR_MQL5_WRONG_PROPERTY 0
 #define ERR_NO_STRING_DATE 0
 #define ERR_NOT_ENOUGH_MEMORY 0
 #define ERR_NOTIFICATION_SEND_FAILED 0
@@ -495,15 +704,15 @@
 #define ERR_OPENCL_EXECUTE 0
 #define ERR_OPENCL_INTERNAL 0
 #define ERR_OPENCL_INVALID_HANDLE 0
-#define ERR_OPENCL_KERNEL_CREATE  0
+#define ERR_OPENCL_KERNEL_CREATE 0
 #define ERR_OPENCL_NOT_SUPPORTED 0
-#define ERR_OPENCL_PROGRAM_CREATE  0
+#define ERR_OPENCL_PROGRAM_CREATE 0
 #define ERR_OPENCL_QUEUE_CREATE 0
 #define ERR_OPENCL_SET_KERNEL_PARAMETER 0
 #define ERR_OPENCL_TOO_LONG_KERNEL_NAME 0
 #define ERR_OPENCL_WRONG_BUFFER_OFFSET 0
 #define ERR_OPENCL_WRONG_BUFFER_SIZE 0
-#define ERR_PLAY_SOUND_FAILED  0
+#define ERR_PLAY_SOUND_FAILED 0
 #define ERR_RESOURCE_NAME_DUPLICATED 0
 #define ERR_RESOURCE_NAME_IS_TOO_LONG 0
 #define ERR_RESOURCE_NOT_FOUND 0
@@ -947,6 +1156,7 @@
 #define POSITION_TYPE_BUY 0
 #define POSITION_TYPE_SELL 0
 #define POSITION_VOLUME 0
+/*
 #define PRICE_CLOSE 0
 #define PRICE_HIGH 0
 #define PRICE_LOW 0
@@ -954,6 +1164,7 @@
 #define PRICE_OPEN 0
 #define PRICE_TYPICAL 0
 #define PRICE_WEIGHTED 0
+*/
 #define PROGRAM_EXPERT 0
 #define PROGRAM_INDICATOR 0
 #define PROGRAM_SCRIPT 0
@@ -1085,7 +1296,7 @@
 #define SYMBOL_DIGITS 0
 #define SYMBOL_EXPIRATION_DAY 0
 #define SYMBOL_EXPIRATION_GTC 0
-#define SYMBOL_EXPIRATION_MODE  0
+#define SYMBOL_EXPIRATION_MODE 0
 #define SYMBOL_EXPIRATION_SPECIFIED 0
 #define SYMBOL_EXPIRATION_SPECIFIED_DAY 0
 #define SYMBOL_EXPIRATION_TIME 0
@@ -1100,7 +1311,7 @@
 #define SYMBOL_MARGIN_MAINTENANCE 0
 #define SYMBOL_OPTION_MODE 0
 #define SYMBOL_OPTION_MODE_EUROPEAN 0
-#define SYMBOL_OPTION_MODE_AMERICAN  0
+#define SYMBOL_OPTION_MODE_AMERICAN 0
 #define SYMBOL_OPTION_RIGHT 0
 #define SYMBOL_OPTION_RIGHT_CALL 0
 #define SYMBOL_OPTION_RIGHT_PUT 0
@@ -1110,7 +1321,7 @@
 #define SYMBOL_ORDER_MODE 0
 #define SYMBOL_ORDER_SL 0
 #define SYMBOL_ORDER_STOP 0
-#define SYMBOL_ORDER_STOP_LIMIT  0
+#define SYMBOL_ORDER_STOP_LIMIT 0
 #define SYMBOL_ORDER_TP 0
 #define SYMBOL_PATH 0
 #define SYMBOL_POINT 0
@@ -1270,7 +1481,7 @@
 #define UCHAR_MAX 0
 #define UINT_MAX 0
 #define ULONG_MAX 0
-#define UPPER_BAND  0
+#define UPPER_BAND 0
 #define UPPER_HISTOGRAM 0
 #define UPPER_LINE 0
 #define USHORT_MAX 0
@@ -1283,7 +1494,7 @@
 #define AccountInfoInteger() 0
 #define AccountInfoString() 0
 #define acos() 0
-#define Alert() 0
+// #define Alert() 0
 #define ArrayBsearch() 0
 #define ArrayCompare() 0
 #define ArrayCopy() 0
@@ -1322,7 +1533,7 @@
 #define ChartNext() 0
 #define ChartOpen() 0
 #define CharToString() 0
-#define ChartPeriod() 0
+// #define ChartPeriod() 0
 #define ChartPriceOnDropped() 0
 #define ChartRedraw() 0
 #define ChartSaveTemplate() 0
@@ -1331,7 +1542,7 @@
 #define ChartSetInteger() 0
 #define ChartSetString() 0
 #define ChartSetSymbolPeriod() 0
-#define ChartSymbol() 0
+// #define ChartSymbol() 0
 #define ChartTimeOnDropped() 0
 #define ChartTimePriceToXY() 0
 #define ChartWindowFind() 0
@@ -1369,7 +1580,7 @@
 #define CopySpread() 0
 #define CopyTicks() 0
 #define CopyTickVolume() 0
-#define CopyTime() 0
+// #define CopyTime() 0
 #define cos() 0
 #define CryptDecode() 0
 #define CryptEncode() 0
@@ -1460,7 +1671,7 @@
 #define HistorySelectByPosition() 0
 #define iAC() 0
 #define iAD() 0
-#define iADX() 0
+// #define iADX() 0
 #define iADXWilder() 0
 #define iAlligator() 0
 #define iAMA() 0
@@ -1510,7 +1721,7 @@
 #define MarketBookAdd() 0
 #define MarketBookGet() 0
 #define MarketBookRelease() 0
-#define MathAbs() 0
+// #define MathAbs() 0
 #define MathArccos() 0
 #define MathArcsin() 0
 #define MathArctan() 0
@@ -1557,10 +1768,10 @@
 #define OrderGetInteger() 0
 #define OrderGetString() 0
 #define OrderGetTicket() 0
-#define OrderSelect() 0
-#define OrderSend() 0
+// #define OrderSelect() 0
+// #define OrderSend() 0
 #define OrderSendAsync() 0
-#define OrdersTotal() 0
+// #define OrdersTotal() 0
 #define ParameterGetRange() 0
 #define ParameterSetRange() 0
 #define Period() 0
@@ -1580,9 +1791,9 @@
 #define PositionSelectByTicket() 0
 #define PositionsTotal() 0
 #define pow() 0
-#define Print() 0
-#define printf() 0
-#define PrintFormat() 0
+// #define Print() 0
+// #define printf() 0
+// #define PrintFormat() 0
 #define rand() 0
 #define ResetLastError() 0
 #define ResourceCreate() 0
@@ -1619,7 +1830,7 @@
 #define StringConcatenate() 0
 #define StringFill() 0
 #define StringFind() 0
-#define StringFormat() 0
+// #define StringFormat() 0
 #define StringGetCharacter() 0
 #define StringInit() 0
 #define StringLen() 0
@@ -1670,3 +1881,5 @@
 #define UninitializeReason() 0
 #define WebRequest() 0
 #define ZeroMemory() 0
+
+#endif

@@ -2,3 +2,7 @@
 *.dll
 *.log
 *.dat
+*~
+*.bak
+*.orig
+*.rej
