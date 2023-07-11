@@ -1,5 +1,13 @@
-*.mq4
-*.mqh
+/*.mq4
+/*.mqh
+/Arrays
+/Canvas
+/ChartObjects
+/Charts
 /Controls
+/Files
+/Indicators
+/Strings
+/Tools
 !adxcommon.mq4
 !libMql4.mq4
