@@ -1,4 +1,5 @@
 *.ex4
+/Logs
 *.dll
 *.log
 *.dat
@@ -6,3 +7,5 @@
 *.bak
 *.orig
 *.rej
+*.pdf
+*.png

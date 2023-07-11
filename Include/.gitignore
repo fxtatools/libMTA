@@ -1,0 +1,5 @@
+*.mq4
+*.mqh
+/Controls
+!adxcommon.mq4
+!libMql4.mq4
