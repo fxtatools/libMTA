@@ -25,9 +25,11 @@
  * String Functions (FIXME)
  **/
 
+// #define StringFormat(s, ...) std::format(s, __VA_ARGS__)
 //// HACK:
 #define StringFormat(s, ...) s
 
+// #define Print(...) std::cout << __VA_ARGS__
 //// HACK:
 #define Print(...) __VA_ARGS__
 
@@ -47,6 +49,14 @@ typedef int color;
 typedef unsigned long ulong;
 typedef unsigned long datetime;
 typedef const char *string;
+
+/**
+ * Arrays
+ **/
+
+int ArrayResize(void *array, int new_size, int reserve_size = 0);
+bool ArraySetAsSeries(const void *array, bool flag);
+int ArraySize(const void *array);
 
 /**
  * Time
@@ -87,12 +97,200 @@ string _Symbol;
 enum ENUM_TIMEFRAMES ChartPeriod(long chart_id = 0L);
 const string ChartSymbol(long chart_id = 0L);
 
+struct MqlTick
+{
+    datetime time;
+    double bid;
+    double ask;
+    double last;
+    ulong volume;
+};
+
+bool SymbolInfoTick(
+    string symbol,
+    MqlTick &tick);
+
 /**
  * Graphical Objects
  **/
 
 #define clrNONE -1
 #define CLR_NONE clrNONE
+
+#define EMPTY -1
+
+/**
+ * Custom Indicators
+ **/
+
+// https://www.mql5.com/en/docs/constants/indicatorconstants/customindicatorproperties
+enum ENUM_INDEXBUFFER_TYPE
+{
+    INDICATOR_DATA,        // Indicator Data
+    INDICATOR_COLOR_INDEX, // MQL5 indicator color
+    INDICATOR_CALCULATIONS // Ancillary data
+};
+
+enum _SHAPE_STYLE
+{
+    DRAW_LINE,
+    DRAW_SECTION,
+    DRAW_HISTOGRAM,
+    DRAW_ARROW,
+    DRAW_ZIGZAG,
+    DRAW_NONE = 12
+};
+
+enum ENUM_LINE_STYLE {
+    _STYLE_EMPTY = EMPTY,
+    STYLE_SOLID,
+    STYLE_DASH,
+    STYLE_DOT,
+    STYLE_DASHDOT,
+    STYLE_DASHDOTDOT,
+};
+
+enum _LINE_WIDTH {
+    _LINE_WIDTH_NO_CHANGE,
+    _LINE_WIDTH_1,
+    _LINE_WIDTH_2,
+    _LINE_WIDTH_3,
+    _LINE_WIDTH_4,
+    _LINE_WIDTH_5
+}
+
+enum ENUM_INDEXBUFFER_TYPE {
+    INDICATOR_DATA
+}
+
+void SetIndexStyle(
+    int index,          // line index
+    _SHAPE_STYLE type,          // line type
+    ENUM_LINE_STYLE style = EMPTY,  // line style
+    _LINE_WIDTH width = _LINE_WIDTH_NO_CHANGE,  // line width
+    color clr = clrNONE // line color
+);
+
+void SetIndexStyle(
+    int index,
+    int type,
+    int style = EMPTY,
+    int width = EMPTY,
+    color clr = clrNONE);
+
+bool IndicatorSetDouble(
+    int prop_id,      // identifier
+    double prop_value // value to be set
+);
+
+bool IndicatorSetDouble(
+    int prop_id,       // identifier
+    int prop_modifier, // modifier
+    double prop_value  // value to be set
+);
+
+bool IndicatorSetInteger(
+    int prop_id,   // identifier
+    int prop_value // value to be set
+);
+
+bool IndicatorSetInteger(
+    int prop_id,       // identifier
+    int prop_modifier, // modifier
+    int prop_value     // value to be set
+);
+
+bool IndicatorSetString(
+    int prop_id,      // identifier
+    string prop_value // value to be set
+);
+
+bool IndicatorSetString(
+    int prop_id,       // identifier
+    int prop_modifier, // modifier
+    string prop_value  // value to be set
+);
+
+bool IndicatorSetString(
+    int prop_id,       // identifier
+    int prop_modifier, // modifier
+    string prop_value  // value to be set
+);
+
+bool SetIndexBuffer(
+    int index,                      // buffer index
+    double *buffer[],                // array
+    ENUM_INDEXBUFFER_TYPE data_type // what will be stored
+);
+
+bool SetIndexBuffer(
+    int index,      // buffer index
+    double *buffer[] // array
+);
+
+bool IndicatorBuffers(
+    int count // buffers
+);
+
+int IndicatorCounted();
+
+void IndicatorDigits(
+    int digits // digits
+);
+
+void IndicatorShortName(
+    string name // name
+);
+
+void SetIndexArrow(
+    int index, // line index
+    int code   // code
+);
+
+void SetIndexArrow(
+    int index, // line index
+    int code   // code
+);
+
+void SetIndexDrawBegin(
+    int index, // line index
+    int begin  // position
+);
+
+void SetIndexEmptyValue(
+    int index,   // line index
+    double value // new "empty value"
+);
+
+void SetIndexLabel(
+    int index,  // line index
+    string text // text
+);
+
+void SetIndexShift(
+    int index, // line index
+    int shift  // shift
+);
+
+void SetIndexStyle(
+    int index,          // line index
+    int type,           // line type
+    int style = EMPTY,  // line style
+    int width = EMPTY,  // line width
+    color clr = clrNONE // line color
+);
+
+void SetLevelStyle(
+    int draw_style, // drawing style
+    int line_width, // line width
+    color clr       // color
+);
+
+void SetLevelStyle(
+    int draw_style, // drawing style
+    int line_width, // line width
+    color clr       // color
+);
 
 /**
  * Orders
@@ -199,8 +397,6 @@ double MathAbs(double value);
 int iBars(const string symbol, int timeframe);
 int iBarShift(const string symbol, int timeframe, datetime time, bool exact = false);
 
-// #define ENUM_MA_KIND ...
-
 enum ENUM_APPLIED_PRICE
 {
     PRICE_CLOSE,
@@ -210,6 +406,14 @@ enum ENUM_APPLIED_PRICE
     PRICE_MEDIAN,
     PRICE_TYPICAL,
     PRICE_WEIGHTED
+};
+
+enum ENUM_MA_METHOD
+{
+    MODE_SMA,
+    MODE_EMA,
+    MODE_SMMA,
+    MODE_LWMA
 };
 
 // FIXME testing with iADXWilder ...
@@ -227,6 +431,19 @@ double iADX(string &symbol, int timeframe, int period, int applied_price, _ADX_M
  */
 
 #define input(type, expr)
+
+enum _DEINIT_REASON
+{
+    REASON_PROGRAM,
+    REASON_REMOVE,
+    REASON_RECOMPILE,
+    REASON_CHARTCLOSE,
+    REASON_PARAMETERS,
+    REASON_ACCOUNT,
+    REASON_TEMPLATE,
+    REASON_INITFAILED,
+    REASON_CLOSE
+}
 
 /**
  * Batch from contrib
@@ -585,12 +802,12 @@ double iADX(string &symbol, int timeframe, int period, int applied_price, _ADX_M
 #define DRAW_COLOR_SECTION 0
 #define DRAW_COLOR_ZIGZAG 0
 #define DRAW_FILLING 0
-#define DRAW_HISTOGRAM 0
+// #define DRAW_HISTOGRAM 0
 #define DRAW_HISTOGRAM2 0
-#define DRAW_LINE 0
-#define DRAW_NONE 0
-#define DRAW_SECTION 0
-#define DRAW_ZIGZAG 0
+// #define DRAW_LINE 0
+// #define DRAW_NONE 0
+// #define DRAW_SECTION 0
+// #define DRAW_ZIGZAG 0
 #define ELLIOTT_CYCLE 0
 #define ELLIOTT_GRAND_SUPERCYCLE 0
 #define ELLIOTT_INTERMEDIATE 0
@@ -909,10 +1126,12 @@ double iADX(string &symbol, int timeframe, int period, int applied_price, _ADX_M
 #define MB_YESNO 0
 #define MB_YESNOCANCEL 0
 #define MINUSDI_LINE 0
+/*
 #define MODE_EMA 0
 #define MODE_LWMA 0
 #define MODE_SMA 0
 #define MODE_SMMA 0
+*/
 #define MONDAY 0
 #define MQL_DEBUG 0
 #define MQL_DLLS_ALLOWED 0
@@ -1100,26 +1319,26 @@ double iADX(string &symbol, int timeframe, int period, int applied_price, _ADX_M
 #define ORDER_VOLUME_CURRENT 0
 #define ORDER_VOLUME_INITIAL 0
 #define PERIOD_CURRENT 0
-#define PERIOD_D1 0
-#define PERIOD_H1 0
+// #define PERIOD_D1 0
+// #define PERIOD_H1 0
 #define PERIOD_H12 0
 #define PERIOD_H2 0
 #define PERIOD_H3 0
-#define PERIOD_H4 0
+// #define PERIOD_H4 0
 #define PERIOD_H6 0
 #define PERIOD_H8 0
-#define PERIOD_M1 0
+// #define PERIOD_M1 0
 #define PERIOD_M10 0
 #define PERIOD_M12 0
-#define PERIOD_M15 0
+// #define PERIOD_M15 0
 #define PERIOD_M2 0
 #define PERIOD_M20 0
 #define PERIOD_M3 0
-#define PERIOD_M30 0
+// #define PERIOD_M30 0
 #define PERIOD_M4 0
-#define PERIOD_M5 0
+// #define PERIOD_M5 0
 #define PERIOD_M6 0
-#define PERIOD_MN1 0
+// #define PERIOD_MN1 0
 #define PERIOD_W1 0
 #define PLOT_ARROW 0
 #define PLOT_ARROW_SHIFT 0
@@ -1168,16 +1387,16 @@ double iADX(string &symbol, int timeframe, int period, int applied_price, _ADX_M
 #define PROGRAM_EXPERT 0
 #define PROGRAM_INDICATOR 0
 #define PROGRAM_SCRIPT 0
-#define REASON_ACCOUNT 0
-#define REASON_CHARTCHANGE 0
-#define REASON_CHARTCLOSE 0
-#define REASON_CLOSE 0
-#define REASON_INITFAILED 0
-#define REASON_PARAMETERS 0
-#define REASON_PROGRAM 0
-#define REASON_RECOMPILE 0
-#define REASON_REMOVE 0
-#define REASON_TEMPLATE 0
+// #define REASON_ACCOUNT 0
+// #define REASON_CHARTCHANGE 0
+// #define REASON_CHARTCLOSE 0
+// #define REASON_CLOSE 0
+// #define REASON_INITFAILED 0
+// #define REASON_PARAMETERS 0
+// #define REASON_PROGRAM 0
+// #define REASON_RECOMPILE 0
+// #define REASON_REMOVE 0
+// #define REASON_TEMPLATE 0
 #define SATURDAY 0
 #define SEEK_CUR 0
 #define SEEK_END 0
@@ -1507,9 +1726,9 @@ double iADX(string &symbol, int timeframe, int period, int applied_price, _ADX_M
 #define ArrayMaximum() 0
 #define ArrayMinimum() 0
 #define ArrayRange() 0
-#define ArrayResize() 0
-#define ArraySetAsSeries() 0
-#define ArraySize() 0
+// #define ArrayResize() 0
+// #define ArraySetAsSeries() 0
+// #define ArraySize() 0
 #define ArraySort() 0
 #define asin() 0
 #define atan() 0
@@ -1805,7 +2024,7 @@ double iADX(string &symbol, int timeframe, int period, int applied_price, _ADX_M
 #define SendMail() 0
 #define SendNotification() 0
 #define SeriesInfoInteger() 0
-#define SetIndexBuffer() 0
+// #define SetIndexBuffer() 0
 #define ShortArrayToString() 0
 #define ShortToString() 0
 #define SignalBaseGetDouble() 0
@@ -1856,7 +2075,7 @@ double iADX(string &symbol, int timeframe, int period, int applied_price, _ADX_M
 #define SymbolInfoSessionQuote() 0
 #define SymbolInfoSessionTrade() 0
 #define SymbolInfoString() 0
-#define SymbolInfoTick() 0
+// #define SymbolInfoTick() 0
 #define SymbolIsSynchronized() 0
 #define SymbolName() 0
 #define SymbolSelect() 0
