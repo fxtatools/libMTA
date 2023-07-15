@@ -5,8 +5,6 @@
 //+------------------------------------------------------------------+
 #property strict
 
-#include <../Libraries/libMTA/libATR.mq4>
-
 #property indicator_buffers 1
 #property indicator_color1 clrDodgerBlue
 #property indicator_width1 1
@@ -16,6 +14,8 @@
 // #property indicator_separate_window
 
 extern const int iatr_period = 14; // ATR Period
+
+#include <../Libraries/libMTA/libATR.mq4>
 
 double ATR_data[];
 ATRIter ATR_iter(iatr_period, _Point);

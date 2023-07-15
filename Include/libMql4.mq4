@@ -14,12 +14,10 @@
 
 static const double __dblzero__ = 0.0;
 
-extern bool debug = false;
-
 #ifndef DEBUG
+extern bool debug = false;
 #define DEBUG if(debug) printf
 #endif
-
 
 /**
  * Return the time at a given offset, as a single datetime value
