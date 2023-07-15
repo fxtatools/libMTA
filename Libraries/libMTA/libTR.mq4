@@ -45,18 +45,26 @@
  *   to the `next_atr_price()` method. This may be called, for instance, during
  *   indicator update.
  *
- *   For this purpose, the `points_to_price()` and `price_to_points()` methods
- *   are provided. These methods will use the points ratio initialized to the
- *   `ATRIter`.
+ * - The methods `points_to_price()` and `price_to_points()` are provided for
+ *   utility in converting output point and input price values for an `ATRIter`.
+ * 
+ *   These methods will use the points ratio initialized to the `ATRIter`, unless
+ *   that points ratio is provided as `NULL`, in which case the methods will return
+ *   the input value without mathematical translation.
  *
  * - If the `ATRIter` is being initialized for a market symbol other than the
  *   current symbol, the constructor `ATRIter(int atr_period, const double points)`
- *   should be used. This should serve to ensure correct translation of price values
- *   to points values, for quotes under the other market symbol.
+ *   should be used. Provided with the points ratio for the other market symbol, 
+ *   this should serve to ensure a correct translation of price values to points
+ *   values and conversely.
  *
  *   Otherwise, the constructor `ATRIter(int atr_period)` may be sufficient.
+ * 
+ * - To initialize an `ATRIter` without price-to-points conversion, call the
+ *   constructor `ATRIter(int atr_period, const double points)` with a `NULL`
+ *   value for `points`.
  *
- *  - For purpose of relative precision in calculation, these methods will not
+ * - For purpose of relative precision in calculation, these methods will not
  *   normalize any point or price value per market scale.
  *
  * References
@@ -80,14 +88,28 @@ public:
     ATRIter(int _atr_period) : atr_period(_atr_period), atr_period_minus(atr_period - 1), points_ratio(_Point){};
     ATRIter(int _atr_period, double _points_ratio) : atr_period(_atr_period), atr_period_minus(atr_period - 1), points_ratio(_points_ratio){};
 
-    double points_to_price(double points)
+    double points_to_price(const double points)
     {
-        return points * points_ratio;
+        if (points_ratio == NULL)
+        {
+            return points;
+        }
+        else
+        {
+            return points * points_ratio;
+        }
     }
 
-    double price_to_points(double price)
+    double price_to_points(const double price)
     {
-        return price / points_ratio;
+        if (points_ratio == NULL)
+        {
+            return price;
+        }
+        else
+        {
+            return price / points_ratio;
+        }
     }
 
     double next_tr_price(const int idx, const double &high[], const double &low[], const double &close[])
@@ -100,7 +122,7 @@ public:
         return MathMax(cur_high, prev_close) - MathMin(cur_low, prev_close);
     }
 
-    double next_atr_price(int idx, const double prev_price, const double &high[], const double &low[], const double &close[])
+    double next_atr_price(const int idx, const double prev_price, const double &high[], const double &low[], const double &close[])
     {
         // not applicable if extent < atr_period
 
@@ -108,6 +130,11 @@ public:
 
         // see implementation notes, above
         return (prev_price * atr_period_minus + next_tr_price(idx, high, low, close)) / atr_period;
+    }
+
+    double next_atr_points(const int idx, const double prev_points, const double &high[], const double &low[], const double &close[])
+    {
+        return next_atr_price(idx, points_to_price(prev_points), high, low, close);
     }
 
     void initialize_points(int extent, double &atr[], const double &high[], const double &low[], const double &close[])
@@ -124,10 +151,10 @@ public:
         DEBUG("Initial ATR (%d) %f", extent, last_atr);
         atr[extent] = last_atr / points_ratio;
 
-        while (extent > 0)
+        while (extent != 0)
         {
             last_atr = next_atr_price(--extent, last_atr, high, low, close);
-            atr[extent] = last_atr / points_ratio;
+            atr[extent] = price_to_points(last_atr);
         }
     };
 };

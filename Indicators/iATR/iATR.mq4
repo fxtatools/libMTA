@@ -57,11 +57,11 @@ int OnCalculate(const int rates_total,
   {
     // printf("updating %d/%d", prev_calculated, rates_total);
     int count = rates_total == prev_calculated ? rates_total - 1 : prev_calculated - rates_total;
-    double next_price = ATR_iter.points_to_price(ATR_data[count]);
-    while(count > 0) 
+    double next_points = ATR_data[count];
+    while(count != 0) 
     {
-      next_price = ATR_iter.next_atr_price(--count, next_price, high, low, close);
-      ATR_data[count] = ATR_iter.price_to_points(next_price);
+      next_points = ATR_iter.next_atr_points(--count, next_points, high, low, close);
+      ATR_data[count] = next_points;
     }
   }
 
