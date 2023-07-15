@@ -19,13 +19,13 @@
  *
  * - The results of this iterator will vary with relation to the MetaTrader 4 ATR indicator.
  *
- *   The MT4 ATR indicator will smooth later ATR values across the defined ATR period,
+ *   The MT4 ATR indicator will smooth later TR values across the defined ATR period,
  *   throughout the duration of ATR values calculation.
  *
- *   Subsequent of the initial period in market quotes, the following implementation
+ *   Subsequent of the initial ART period in market quotes, the following implementation
  *   will use only the exponential moving average for each individual ATR value. Per
- *   references cited below, this is believed to represent an adequate method for
- *   calculating ATR.
+ *   references cited below, mainly [Wik] this is believed to represent an adequate 
+ *   method for calculating ATR.
  *
  * - The interface to this iterator varies with relation to the MT4 ATR indicator.
  *
@@ -35,18 +35,21 @@
  *
  * - The following implementation uses units of market price, internally.
  *
- *   The `initialize_points()` method will set the ATR value into the provided data
- *   buffer, using units of points for ATRIter as initialized. This is believed
+ *   The `initialize_atr_points()` method will set the ATR value into the provided data
+ *   buffer, using units of points for the `ATRIter` as initialized. This is believed
  *   to represent a methodology for establishing a helpful magnitude for values
- *   from ATR calculations.
+ *   from ATR calculations in Forex markets.
  *
- *   Any calling function will need to re-translate each data buffer value from
- *   units of points to units of market price, before providing the price value
- *   to the `next_atr_price()` method. This may be called, for instance, during
- *   indicator update.
+ *   Any calling function will need to translate each data buffer value from
+ *   units of points to units of market price, if providing the price value
+ *   to the `next_atr_price()` method.
+ * 
+ *   Alternately, the original points value may be provided to the method 
+ *   `next_atr_points()`.  This may be called, for instance, during indicator 
+ *   update. 
  *
  * - The methods `points_to_price()` and `price_to_points()` are provided for
- *   utility in converting output point and input price values for an `ATRIter`.
+ *   utility in converting point and price values for an `ATRIter`.
  * 
  *   These methods will use the points ratio initialized to the `ATRIter`, unless
  *   that points ratio is provided as `NULL`, in which case the methods will return
@@ -75,6 +78,12 @@
  * See Also
  *
  * [ADX] https://www.investopedia.com/terms/a/adx.asp
+ * - Note, this page appears to recommend further smoothing for TR within the ATR 
+ *   period, in a manner similar to that used in the original MT4 ATR indicator.
+ *   The ATR page at [Wik] may not appear to suggest quite the same, but using only
+ *   the same exponential  moving average calculation as used for the final ADX
+ *   calculation
+ *
  */
 class ATRIter
 {
@@ -125,10 +134,6 @@ public:
     double next_atr_price(const int idx, const double prev_price, const double &high[], const double &low[], const double &close[])
     {
         // not applicable if extent < atr_period
-
-        // by side effect, the next_tr_price() call will update extent to current
-
-        // see implementation notes, above
         return (prev_price * atr_period_minus + next_tr_price(idx, high, low, close)) / atr_period;
     }
 
@@ -137,7 +142,7 @@ public:
         return next_atr_price(idx, points_to_price(prev_points), high, low, close);
     }
 
-    void initialize_points(int extent, double &atr[], const double &high[], const double &low[], const double &close[])
+    void initialize_atr_points(int extent, double &atr[], const double &high[], const double &low[], const double &close[])
     {
         //// if extent < atr_period , fail (FIXME)
 
@@ -147,9 +152,9 @@ public:
         {
             last_atr += next_tr_price(extent--, high, low, close);
         }
-        last_atr = last_atr / atr_period;
-        DEBUG("Initial ATR (%d) %f", extent, last_atr);
-        atr[extent] = last_atr / points_ratio;
+        last_atr /= atr_period;
+        DEBUG("Initial ATR (%d) %f", extent, price_to_points(last_atr));
+        atr[extent] = price_to_points(last_atr);
 
         while (extent != 0)
         {

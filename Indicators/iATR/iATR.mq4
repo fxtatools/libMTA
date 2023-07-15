@@ -51,7 +51,7 @@ int OnCalculate(const int rates_total,
   if (prev_calculated == 0)
   {
     DEBUG("init %d", rates_total);
-    ATR_iter.initialize_points(rates_total, ATR_data, high, low, close);
+    ATR_iter.initialize_atr_points(rates_total, ATR_data, high, low, close);
   }
   else
   {
