@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property strict
 
-#include <../Libraries/libMTA/libTR.mq4>
+#include <../Libraries/libMTA/libATR.mq4>
 
 #property indicator_buffers 1
 #property indicator_color1 clrDodgerBlue
