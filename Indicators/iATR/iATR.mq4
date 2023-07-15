@@ -18,7 +18,7 @@
 extern const int iatr_period = 14; // ATR Period
 
 double ATR_data[];
-ATRIter ATR_iter(iatr_period);
+ATRIter ATR_iter(iatr_period, _Point);
 
 int OnInit()
 {
@@ -31,7 +31,7 @@ int OnInit()
   SetIndexLabel(0, shortname);
   SetIndexStyle(0, DRAW_LINE);
 
-  ArraySetAsSeries(ATR_data, false);
+  ArraySetAsSeries(ATR_data, true);
   // ArrayResize(ATR_data, iBars(_Symbol, _Period));
 
   return (INIT_SUCCEEDED);
@@ -48,23 +48,20 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-  ArraySetAsSeries(ATR_data, false);
-  ATR_iter.init_buffers(high, low, close);
   if (prev_calculated == 0)
   {
-    printf("init %d", rates_total);
-    ATR_iter.initialize(rates_total, ATR_data, high, low, close);
+    DEBUG("init %d", rates_total);
+    ATR_iter.initialize_points(rates_total, ATR_data, high, low, close);
   }
   else
   {
-    printf("updating %d", prev_calculated);
-    const int count = rates_total == prev_calculated ? rates_total - 1 : rates_total;
-    ATR_iter.set_idx(prev_calculated); // ??
-    double next_atr = ATR_data[prev_calculated] * _Point; // ! see remarks in .initialize()
-    for (int n = prev_calculated; n < count; n++)
+    // printf("updating %d/%d", prev_calculated, rates_total);
+    int count = rates_total == prev_calculated ? rates_total - 1 : prev_calculated - rates_total;
+    double next_price = ATR_iter.points_to_price(ATR_data[count]);
+    while(count > 0) 
     {
-      next_atr = ATR_iter.next_atr(next_atr, high, low, close);
-      ATR_data[n] = next_atr;
+      next_price = ATR_iter.next_atr_price(--count, next_price, high, low, close);
+      ATR_data[count] = ATR_iter.price_to_points(next_price);
     }
   }
 
