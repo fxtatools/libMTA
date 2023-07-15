@@ -12,53 +12,29 @@
 #property link      "https://www.example.com/nop"
 #property strict
 
-#ifndef dbg
-#define dbg Alert
-#endif
+static const double __dblzero__ = 0.0;
 
 extern bool debug = false;
 
-union Timeframe
-{
-    ENUM_TIMEFRAMES timeframe;
-    int period;
+#ifndef DEBUG
+#define DEBUG if(debug) printf
+#endif
 
-public:
-    Timeframe() : period(_Period){};
-    Timeframe(int duration) : period(duration){};
-    Timeframe(ENUM_TIMEFRAMES tframe) : timeframe(tframe){};
-};
-
-class Chartable
-{
-protected:
-    string symbol;
-    Timeframe timeframe;
-
-public:
-    Chartable() : symbol(_Symbol), timeframe(_Period)
-    {
-        if (debug) dbg(StringFormat("Initialized charatble: %s %d", symbol, timeframe.period));
-    };
-    Chartable(ENUM_TIMEFRAMES tframe) : symbol(_Symbol), timeframe(tframe){};
-    Chartable(string s) : symbol(s), timeframe(_Period){};
-    Chartable(string s, ENUM_TIMEFRAMES tframe) : symbol(s), timeframe(tframe){};
-};
 
 /**
  * Return the time at a given offset, as a single datetime value
  **/    
 datetime offset_time(const int shift, const int timeframe)
 {
-
-    static datetime dtbuff[1];
+    datetime dtbuff[1];
     CopyTime(_Symbol, timeframe, shift, 1, dtbuff);
     return dtbuff[0];
 }
 
+/* might be useful for timer-based processing
 
-bool rates_at(const int offset, const ENUM_TIMEFRAMES timeframe, double &buffer[]) {
-    static MqlRates rates[1];
+bool rates_quote(const int offset, const ENUM_TIMEFRAMES timeframe, double &buffer[]) {
+    MqlRates rates[1];
     int rc = CopyRates(_Symbol, timeframe, offset, 1, rates);
     if (rc == -1) {
         return false;
@@ -69,3 +45,4 @@ bool rates_at(const int offset, const ENUM_TIMEFRAMES timeframe, double &buffer[
     buffer[3] = rates[0].close;
     return true;
 }
+*/

@@ -1,5 +1,3 @@
-/*.mq4
-/*.mqh
 /Arrays
 /Canvas
 /ChartObjects
@@ -9,5 +7,9 @@
 /Indicators
 /Strings
 /Tools
-!adxcommon.mq4
-!libMql4.mq4
+MovingAverages.mqh
+Object.mqh
+StdLibErr.mqh
+WinUser32.mqh
+stderror.mqh
+stdlib.mqh
