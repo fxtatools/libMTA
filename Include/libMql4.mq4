@@ -29,14 +29,24 @@ extern bool debug = false;
 /**
  * Return the time at a given offset, as a single datetime value
  **/    
-datetime offset_time(const int shift, const int timeframe)
+datetime offset_time(const int shift, int timeframe = EMPTY)
 {
-    datetime dtbuff[1];
+    static datetime dtbuff[1];
+    if (timeframe == EMPTY) {
+        timeframe = _Period;
+    }
     CopyTime(_Symbol, timeframe, shift, 1, dtbuff);
     return dtbuff[0];
 }
 
 /* might be useful for timer-based processing
+string offset_time_str(const int shift, int timeframe = EMPTY) {
+    if (timeframe == EMPTY) {
+        timeframe = _Period;
+    }
+    return TimeToStr(offset_time(shift, timeframe));
+}
+
 
 bool rates_quote(const int offset, const ENUM_TIMEFRAMES timeframe, double &buffer[]) {
     MqlRates rates[1];
