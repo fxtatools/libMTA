@@ -7,55 +7,30 @@
 // MQL implementation inspired by the free/open source ZigZag implementation
 // for Cython, by @jbn https://github.com/jbn/ZigZag/
 
+#ifndef _LIBZZWAVE_MQ4
+#define _LIBZZWAVE_MQ4 1
+
 #ifndef __MQLBUILD__
 #include <MQLsyntax.mqh>
 #endif
 
 #include <libMql4.mq4>
+#include <pricemode.mq4>
 
 #property library
 #property strict
 
 // extern const double zzwave_min;
 
+/*
 #define INIT_HL(__HIGHVAR__, __LOWVAR__, __START__, __BID__, __HIGH__, __LOW__)                                  \
     const double __first_h__ = __HIGH__[__START__];                                                              \
     const double __first_l__ = __LOW__[__START__];                                                               \
     const double __HIGHVAR__ = __BID__ == EMPTY ? __first_h__ : (__BID__ > __first_h__ ? __BID__ : __first_h__); \
     const double __LOWVAR__ = __BID__ == EMPTY ? __first_l__ : (__BID__ < __first_l__ ? __BID__ : __first_l__);
+*/
 
-double price_for(const int shift,
-                 const ENUM_APPLIED_PRICE mode,
-                 const double &open[],
-                 const double &high[],
-                 const double &low[],
-                 const double &close[],
-                 const double _ask = EMPTY,
-                 const double _bid = EMPTY)
-{
-    switch (mode)
-    {
-    case PRICE_CLOSE:
-        return close[shift];
-    case PRICE_OPEN:
-        return open[shift];
-    case PRICE_HIGH:
-        return high[shift];
-    case PRICE_LOW:
-        return low[shift];
-    case PRICE_MEDIAN:
-        return (high[shift] + low[shift]) / (double)2;
-    case PRICE_TYPICAL:
-        return (high[shift] + low[shift] + close[shift]) / (double)3;
-    case PRICE_WEIGHTED:
-        return (high[shift] + low[shift] + close[shift] * 2) / (double)4;
-    default:
-        return NULL;
-    }
-}
-
-static const double __dblzero__ = 0.0;
-
+// limitations of this platform. int buffers cannot be used as index buffers.
 static const double __crest__ = 1.0;
 static const double __trough__ = -1.0;
 static const double __none__ = __dblzero__;
@@ -63,6 +38,7 @@ static const double __none__ = __dblzero__;
 #ifndef EMPTY
 #define EMPTY -1
 #endif
+
 
 /// @brief Fill extents (price)
 /// @param extents Extent value buffer
@@ -79,7 +55,7 @@ static const double __none__ = __dblzero__;
 void fill_extents_price(double &extents[],
                         double &statebuff[],
                         const int len,
-                        const ENUM_APPLIED_PRICE price_mode,
+                        const ENUM_PRICE_MODE price_mode,
                         const double &open[],
                         const double &high[],
                         const double &low[],
@@ -109,7 +85,7 @@ void fill_extents_price(double &extents[],
         update = false;
         zero_previous = false;
 
-        if (r_p >= 1 && p_next >= p_trend )
+        if (r_p >= 1 && p_next >= p_last)
         {
             if (trend == __trough__ || trend == __none__)
             {
@@ -117,7 +93,8 @@ void fill_extents_price(double &extents[],
                 {
                     // initial trend
                     extents[__start__] = p_initial;
-                    statebuff[__start__] = __crest__;
+                    // converse of this trend's effective datum:
+                    statebuff[__start__] = __trough__;
                 }
                 else
                 {
@@ -134,8 +111,7 @@ void fill_extents_price(double &extents[],
             }
             trend = __crest__;
         }
-        // second analysis
-        if (r_p < 1 && p_next <= p_trend)
+        else if (p_next < p_last)
         {
             if (trend == __crest__ || trend == __none__)
             {
@@ -143,9 +119,10 @@ void fill_extents_price(double &extents[],
                 {
                     // initial trend
                     extents[__start__] = p_initial;
+                    // converse of this trend's effective datum:
                     statebuff[__start__] = __crest__;
-                }                
-                else if(update == false)
+                }
+                else // if(update == false)
                 {
                     // previous trend
                     //
@@ -163,7 +140,12 @@ void fill_extents_price(double &extents[],
                 zero_previous = true;
             }
             trend = __trough__;
+        } else {
+            extents[n] = __dblzero__;
+            statebuff[n] = __none__;
         }
+
+
         if (zero_previous)
         {
             extents[last_index_offset] = __dblzero__;
@@ -171,15 +153,18 @@ void fill_extents_price(double &extents[],
         }
         if (update)
         {
-            last_index_offset = n;
             extents[n] = p_next;
             statebuff[n] = trend;
+            last_index_offset = n;
             r_p_trend = r_p;
             p_trend = p_next;
-        } else {
+        }
+        else
+        {
             extents[n] = __dblzero__;
             statebuff[n] = __none__;
         }
+        p_last = p_next;
     }
 }
 
@@ -196,7 +181,6 @@ void fill_extents_price(double &extents[],
 void fill_extents_hl(double &extents[],
                      double &statebuff[],
                      const int len,
-                     const ENUM_APPLIED_PRICE price_mode,
                      const double &open[],
                      const double &high[],
                      const double &low[],
@@ -213,139 +197,110 @@ void fill_extents_hl(double &extents[],
     double last_l = initial_l;
     double last_crest = last_h;
     double last_trough = last_l;
-    int last_ext_shift = -1;
+    int last_index_offset = EMPTY;
     double next_h, next_l, r_h, r_l;
     double r_h_highest = __dblzero__;
     double r_l_highest = __dblzero__;
+    double update_p = __dblzero__;
 
     double trend = __none__;
 
-    double p_last = price_for(__start__, price_mode, open, high, low, close);
-    double p_next, r_p;
-    double p_trend = p_last;
-
-    bool update, found;
+    // bool update, found;
+    bool update, zero_previous;
 
     for (int n = __start__ + 1; n < len; n++)
     {
         update = false;
-        found = false;
+        zero_previous = false;
+
         next_l = low[n];
         next_h = high[n];
-        p_next = price_for(n, price_mode, open, high, low, close);
-
-        r_l = next_l / last_trough;
-        if (r_l_highest == DBL_MAX)
-            r_l_highest = r_l;
 
         r_h = next_h / last_crest;
         if (r_h_highest == DBL_MAX)
             r_h_highest = r_h;
 
-        r_p = p_next / p_last;
+        r_l = last_trough / next_l;
+        if (r_l_highest == DBL_MAX)
+            r_l_highest = r_l;
 
-        if (r_h > 1 || r_p > 1 /* || next_l <= last_trough */)
+        // first analysis
+        if (r_h >= 1)
         {
-            if (trend == __none__ || trend == __crest__)
+            if (trend == __trough__ || trend == __none__)
             {
                 if (trend == __none__)
                 {
+                    // ! converse of this trend's effective datum
                     extents[__start__] = initial_l;
                     statebuff[__start__] = __trough__;
+                    last_trough = initial_l; // FIXME overwritten in update
                 }
-                else
-                {
-                    // partial retrace
-                    if (statebuff[last_ext_shift] == __trough__)
-                    {
-                        statebuff[last_ext_shift] = __none__;
-                        extents[last_ext_shift] = __dblzero__;
-                    }
-                }
-                extents[n] = next_h;  // ! converse of this trend's effective datum
-                statebuff[n] = trend; // previous trend
-                last_ext_shift = n;
-                last_trough = next_l;
-                p_trend = p_next;
-            }
-
-            if (next_l <= last_trough || trend == __crest__)
-            {
-                last_trough = next_l;
                 update = true;
+                r_l_highest = r_l;
             }
-
-            //// common
-            trend = __trough__;
+            else if (r_h >= r_h_highest)
+            {
+                update = true;
+                zero_previous = true;
+            }
+            /// common
             if (update)
             {
-                if (statebuff[last_ext_shift] == trend)
-                {
-                    // partial retrace
-                    statebuff[last_ext_shift] = __none__;
-                    extents[last_ext_shift] = __dblzero__;
-                }
-                extents[n] = next_l;
-                statebuff[n] = trend;
-                last_ext_shift = n;
-                p_trend = p_next;
+                update_p = next_h;
+                r_h_highest = r_h;
             }
-            found = true;
+            trend = __crest__;
         }
-
-        // second analysis ... (required after the first now ...)
-        if (r_l >= 1 /* || next_h >= last_crest*/)
+        // second analysis
+        else if (r_l >= 1) 
         {
-            if (trend == __none__ || trend == __trough__)
+            if (trend == __crest__ || trend == __none__)
             {
                 if (trend == __none__)
                 {
-                    extents[0] = initial_h;
-                    statebuff[0] = __crest__;
+                    // ! converse of this trend's effective datum
+                    extents[__start__] = initial_h;
+                    statebuff[__start__] = __crest__;
+                    last_crest = initial_h; // FIXME overwritten in update
                 }
-                else
-                {
-                    // partial retrace
-                    if (statebuff[last_ext_shift] == __crest__)
-                    {
-                        statebuff[last_ext_shift] = __none__;
-                        extents[last_ext_shift] = __dblzero__;
-                    }
-                }
-                extents[n] = next_l;  // ! converse of this trend's effective datum
-                statebuff[n] = trend; // previous trend
-                last_ext_shift = n;
-                last_crest = next_h;
-                p_trend = p_next;
-            }
-
-            if (next_h >= last_crest || trend == __trough__)
-            {
-                // trend may be == __trough__ if the previous __trough__ analysis
-                // was begun during this iteration
-                last_crest = next_h;
                 update = true;
+                r_h_highest = r_h;
             }
-
-            /// common
-            trend = __crest__;
+            else if (r_l >= r_l_highest)
+            {
+                update = true;
+                zero_previous = true;
+            }            
+            //// common
             if (update)
             {
-                if (statebuff[last_ext_shift] == trend)
-                {
-                    // partial retrace
-                    statebuff[last_ext_shift] = __none__;
-                    extents[last_ext_shift] = __dblzero__;
-                }
-                extents[n] = next_h;
-                statebuff[n] = trend;
-                last_ext_shift = n;
-                p_trend = p_next;
+                update_p = next_l;
+                r_l_highest = r_l;
             }
-            found = true;
+            trend = __trough__;
+        } else {
+           extents[n] = __dblzero__; 
+           statebuff[n] = __none__;
         }
 
-        if (!found)
+
+        ///
+        /// common
+        ///
+
+        if (zero_previous)
+        {
+            extents[last_index_offset] = __dblzero__;
+            statebuff[last_index_offset] = __none__;
+        }
+        if (update)
+        {
+            extents[n] = update_p;
+            statebuff[n] = trend;
+            last_index_offset = n;
+        }
+        else
         {
             extents[n] = __dblzero__;
             statebuff[n] = __none__;
@@ -353,6 +308,7 @@ void fill_extents_hl(double &extents[],
 
         last_l = next_l;
         last_h = next_h;
-        p_last = p_next;
     }
 }
+
+#endif
