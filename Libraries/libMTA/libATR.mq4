@@ -4,8 +4,8 @@
 //|                                      https://www.example.com/nop |
 //+------------------------------------------------------------------+
 
-#ifndef _LIBTR_MQ4
-#define _LIBTR_MQ4 1
+#ifndef _LIBATR_MQ4
+#define _LIBATR_MQ4 1
 
 #property library
 #property strict
