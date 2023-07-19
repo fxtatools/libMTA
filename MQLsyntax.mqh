@@ -159,10 +159,6 @@ enum _LINE_WIDTH {
     _LINE_WIDTH_5
 }
 
-enum ENUM_INDEXBUFFER_TYPE {
-    INDICATOR_DATA
-}
-
 void SetIndexStyle(
     int index,          // line index
     _SHAPE_STYLE type,          // line type
@@ -1063,9 +1059,9 @@ enum _DEINIT_REASON
 #define IND_VIDYA 0
 #define IND_VOLUMES 0
 #define IND_WPR 0
-#define INDICATOR_CALCULATIONS 0
-#define INDICATOR_COLOR_INDEX 0
-#define INDICATOR_DATA 0
+// #define INDICATOR_CALCULATIONS 0
+// #define INDICATOR_COLOR_INDEX 0
+// #define INDICATOR_DATA 0
 #define INDICATOR_DIGITS 0
 #define INDICATOR_HEIGHT 0
 #define INDICATOR_LEVELCOLOR 0
