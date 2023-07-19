@@ -56,12 +56,13 @@ int OnCalculate(const int rates_total,
   else
   {
     // printf("updating %d/%d", prev_calculated, rates_total);
-    int count = rates_total == prev_calculated ? rates_total - 1 : prev_calculated - rates_total;
-    double next_points = ATR_data[count];
-    while(count != 0) 
+    int idx = rates_total - prev_calculated;
+    double prev_atr_points = ATR_data[idx + 1];
+    while(idx != -1) 
     {
-      next_points = ATR_iter.next_atr_points(--count, next_points, high, low, close);
-      ATR_data[count] = next_points;
+      prev_atr_points = ATR_iter.next_atr_points(idx, prev_atr_points, high, low, close);
+      ATR_data[idx] = prev_atr_points;
+      idx--;
     }
   }
 
