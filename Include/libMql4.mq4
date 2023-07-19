@@ -12,7 +12,14 @@
 #property link      "https://www.example.com/nop"
 #property strict
 
-static const double __dblzero__ = 0.0;
+
+#ifndef DBLZERO_DEFINED
+#define DBLZERO_DEFINED 1
+const int __dblzero__ = 0.0;
+#ifndef DBLZERO
+#define DBLZERO __dblzero__
+#endif
+#endif
 
 #ifndef DEBUG
 extern bool debug = false;

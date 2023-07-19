@@ -28,6 +28,13 @@ const bool in_test = MQL_TESTER || MQL_VISUAL_MODE || MQL_PROFILER || MQL_DEBUG 
 #define SLIPPAGE_CLOSE 3
 
 extern int start_delay = 5; // seconds
+#ifndef DBLZERO_DEFINED
+#define DBLZERO_DEFINED 1
+const int __dblzero__ = 0.0;
+#ifndef DBLZERO
+#define DBLZERO __dblzero__
+#endif
+#endif
 
 #define dbg Print
 
