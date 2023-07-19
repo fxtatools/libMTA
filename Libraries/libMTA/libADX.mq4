@@ -23,7 +23,7 @@ protected:
     ADXQuote adxq;
 
 public:
-    ADXIter(int period) : ATRIter(period)
+    ADXIter(int period, int period_shift = 1) : ATRIter(period, period_shift)
     {
         adxq = ADXQuote();
     };
@@ -153,7 +153,7 @@ public:
         double minus_di = adxq.minus_di;
         // binding current to adxq
         bind_adx_quote(idx, high, low, close);
-        adxq.dx = ((dx * ema_period_minus) + adxq.dx) / ema_period;
+        adxq.dx = ((dx * ema_shifted_period) + (adxq.dx * ema_shift)) / ema_period;
     }
 
     void update_adx(const int idx, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
@@ -182,7 +182,7 @@ public:
 
     void initialize_adx(int extent, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
     {
-        // printf("ema_period_minus %d", ema_period_minus);
+        // printf("ema_shifted_period %d", ema_shifted_period);
         double next_atr = initial_atr_price(--extent, high, low, close);
         extent -= ema_period; /// for initial ATR
         if (next_atr == 0)

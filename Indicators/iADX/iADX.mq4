@@ -21,7 +21,8 @@
 /// declared in project file ...
 // #property indicator_separate_window
 
-extern const int iadx_period = 20; // iADX MA Period
+extern const int iadx_period = 20; // iADX EMA Period
+extern const int iadx_period_shift = 1; // EMA Period shift
 
 #include <../Libraries/libMTA/libADX.mq4>
 
@@ -30,7 +31,7 @@ double ADX_plus_di[];
 double ADX_minus_di[];
 double ATR_data[]; // FIXME no longer used
 
-ADXIter ADX_iter(iadx_period);
+ADXIter ADX_iter(iadx_period, iadx_period_shift);
 
 static int __initial_rates_total__ = EMPTY;
 
@@ -54,7 +55,7 @@ int OnInit()
 
   IndicatorBuffers(4);
 
-  IndicatorShortName(StringFormat("%s(%d)", shortname, iadx_period));
+  IndicatorShortName(StringFormat("%s(%d, %d)", shortname, iadx_period, iadx_period_shift));
   IndicatorDigits(Digits);
 
   SetIndexBuffer(0, ADX_dx);

@@ -13,12 +13,13 @@
 /// declared in project file ...
 // #property indicator_separate_window
 
-extern const int iatr_period = 14; // ATR Period
+extern const int iatr_period = 14; // ATR EMA Period
+extern const int iatr_period_shift = 1; // EMA Period shift
 
 #include <../Libraries/libMTA/libATR.mq4>
 
 double ATR_data[];
-ATRIter ATR_iter(iatr_period, _Point);
+ATRIter ATR_iter(iatr_period, _Point, iatr_period_shift);
 
 int OnInit()
 {

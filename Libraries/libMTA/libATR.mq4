@@ -88,15 +88,16 @@
 class ATRIter
 {
 protected:
-    const int ema_period_minus;
+    const int ema_shifted_period;
     const double points_ratio;
 
 public:
     int ema_period;
+    int ema_shift;
 
-    // FIXME if ema_period < 2, fail w/ a custom errno
-    ATRIter(int _sma_period) : ema_period(_sma_period), ema_period_minus(_sma_period - 1), points_ratio(_Point){};
-    ATRIter(int _sma_period, double _points_ratio) : ema_period(_sma_period), ema_period_minus(_sma_period - 1), points_ratio(_points_ratio){};
+    ATRIter(int _ema_period, int _ema_shift = 1) : ema_period(_ema_period), ema_shift(_ema_shift), ema_shifted_period(_ema_period - _ema_shift), points_ratio(_Point){};
+
+    ATRIter(int _ema_period, double _points_ratio, int _ema_shift = 1) : ema_period(_ema_period), ema_shift(_ema_shift), ema_shifted_period(_ema_period - _ema_shift), points_ratio(_points_ratio){};
 
     double points_to_price(const double points)
     {
@@ -149,7 +150,7 @@ public:
 
     double next_atr_price(const int idx, const double prev_price, const double &high[], const double &low[], const double &close[])
     {
-        return ((prev_price * ema_period_minus) + next_tr_price(idx, high, low, close)) / ema_period;
+        return ((prev_price * ema_shifted_period) + (next_tr_price(idx, high, low, close) *  ema_shift)) / ema_period;
     }
 
     double next_atr_points(const int idx, const double prev_points, const double &high[], const double &low[], const double &close[])
