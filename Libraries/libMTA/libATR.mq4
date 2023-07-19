@@ -22,7 +22,7 @@
  *   The MT4 ATR indicator will smooth later TR values across the defined ATR period,
  *   throughout the duration of ATR values calculation.
  *
- *   Subsequent of the initial ART period in market quotes, the following implementation
+ *   Subsequent of the initial ATR period in market quotes, the following implementation
  *   will use only the exponential moving average for each individual ATR value. Per
  *   references cited below, mainly [Wik] this is believed to represent an adequate 
  *   method for calculating ATR.
@@ -56,15 +56,15 @@
  *   the input value without mathematical translation.
  *
  * - If the `ATRIter` is being initialized for a market symbol other than the
- *   current symbol, the constructor `ATRIter(int atr_period, const double points)`
+ *   current symbol, the constructor `ATRIter(int ema_period, const double points)`
  *   should be used. Provided with the points ratio for the other market symbol, 
  *   this should serve to ensure a correct translation of price values to points
  *   values and conversely.
  *
- *   Otherwise, the constructor `ATRIter(int atr_period)` may be sufficient.
+ *   Otherwise, the constructor `ATRIter(int ema_period)` may be sufficient.
  * 
  * - To initialize an `ATRIter` without price-to-points conversion, call the
- *   constructor `ATRIter(int atr_period, const double points)` with a `NULL`
+ *   constructor `ATRIter(int ema_period, const double points)` with a `NULL`
  *   value for `points`.
  *
  * - For purpose of relative precision in calculation, these methods will not
@@ -87,15 +87,16 @@
  */
 class ATRIter
 {
-    const int atr_period_minus;
+protected:
+    const int ema_period_minus;
     const double points_ratio;
 
 public:
-    int atr_period;
+    int ema_period;
 
-    // FIXME if atr_period < 2, fail w/ a custom errno
-    ATRIter(int _atr_period) : atr_period(_atr_period), atr_period_minus(atr_period - 1), points_ratio(_Point){};
-    ATRIter(int _atr_period, double _points_ratio) : atr_period(_atr_period), atr_period_minus(atr_period - 1), points_ratio(_points_ratio){};
+    // FIXME if ema_period < 2, fail w/ a custom errno
+    ATRIter(int _sma_period) : ema_period(_sma_period), ema_period_minus(_sma_period - 1), points_ratio(_Point){};
+    ATRIter(int _sma_period, double _points_ratio) : ema_period(_sma_period), ema_period_minus(_sma_period - 1), points_ratio(_points_ratio){};
 
     double points_to_price(const double points)
     {
@@ -131,31 +132,37 @@ public:
         return MathMax(cur_high, prev_close) - MathMin(cur_low, prev_close);
     }
 
+    double initial_atr_price(int extent, const double &high[], const double &low[], const double &close[]) {
+        double atr_sum = high[extent] - low[extent];
+        // printf("initial atr sum [%d] %f", extent, atr_sum);
+        for (int n = 1; n < ema_period; n++)
+        {   
+            atr_sum += next_tr_price(--extent, high, low, close);
+            // printf("initial atr sum [%d] %f", extent, atr_sum);
+        }
+        return atr_sum / ema_period;
+    }
+
+    double initial_atr_points(int extent, const double &high[], const double &low[], const double &close[]) {
+        return price_to_points(initial_atr_price(extent, high, low, close));
+    }
+
     double next_atr_price(const int idx, const double prev_price, const double &high[], const double &low[], const double &close[])
     {
-        // not applicable if extent < atr_period
-        return (prev_price * atr_period_minus + next_tr_price(idx, high, low, close)) / atr_period;
+        return ((prev_price * ema_period_minus) + next_tr_price(idx, high, low, close)) / ema_period;
     }
 
     double next_atr_points(const int idx, const double prev_points, const double &high[], const double &low[], const double &close[])
     {
-        return next_atr_price(idx, points_to_price(prev_points), high, low, close);
+        return price_to_points(next_atr_price(idx, points_to_price(prev_points), high, low, close));
     }
 
     void initialize_atr_points(int extent, double &atr[], const double &high[], const double &low[], const double &close[])
     {
-        //// if extent < atr_period , fail (FIXME)
-
-        double last_atr = high[--extent] - low[extent--];
-
-        for (int n = 1; n < atr_period; n++)
-        {
-            last_atr += next_tr_price(extent--, high, low, close);
-        }
-        last_atr /= atr_period;
-        DEBUG("Initial ATR (%d) %f", extent, price_to_points(last_atr));
+        double last_atr = initial_atr_price(--extent, high, low, close);
+        extent-=ema_period;
         atr[extent] = price_to_points(last_atr);
-
+        DEBUG("Initial ATR at %s: %f", offset_time_str(extent), price_to_points(last_atr));
         while (extent != 0)
         {
             last_atr = next_atr_price(--extent, last_atr, high, low, close);
