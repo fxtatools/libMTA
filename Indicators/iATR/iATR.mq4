@@ -56,15 +56,8 @@ int OnCalculate(const int rates_total,
   }
   else
   {
-    // printf("updating %d/%d", prev_calculated, rates_total);
-    int idx = rates_total - prev_calculated;
-    double prev_atr_points = ATR_data[idx + 1];
-    while(idx != -1) 
-    {
-      prev_atr_points = ATR_iter.next_atr_points(idx, prev_atr_points, high, low, close);
-      ATR_data[idx] = prev_atr_points;
-      idx--;
-    }
+    DEBUG("updating %d/%d %s => %s", prev_calculated, rates_total, TimeToStr(ATR_iter.latest_quote_dt), offset_time_str(0));
+    ATR_iter.update_atr_points(ATR_data, high, low, close);
   }
 
   return (rates_total);
