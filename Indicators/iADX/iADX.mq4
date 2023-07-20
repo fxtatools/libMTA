@@ -106,33 +106,12 @@ int OnCalculate(const int rates_total,
 
   if (prev_calculated == 0)
   {
-  
-    // DEBUG("init %d", rates_total);
-    printf("initializing for %d rate quotes", rates_total);
-    ADX_iter.initialize_adx(rates_total, ATR_data, ADX_dx, ADX_plus_di, ADX_minus_di, high, low, close);
+    printf("initializing for %d quotes", rates_total);
+    ADX_iter.initialize_adx_data(rates_total, ATR_data, ADX_dx, ADX_plus_di, ADX_minus_di, high, low, close);
   }
   else
   {
-    int extent = rates_total - prev_calculated;
-    const int prev_ext = extent + 1;
-    
-    double next_atr = ATR_data[prev_ext];
-    const double initial_dx=ADX_dx[prev_ext];
-    // printf("updating %d/%d initial (%s)  atr %f dx  %f", prev_calculated, rates_total, offset_time_str(prev_ext), next_atr, initial_dx);
-    // ^ next_atr here should stay the same across ticks ...
-    const double initial_plus_di = ADX_plus_di[prev_ext];
-    const double initial_minus_di = ADX_minus_di[prev_ext];
-
-    ADX_iter.prepare_next_iter(next_atr, initial_dx, initial_plus_di, initial_minus_di);
-
-    while(extent >= 0) {      
-      next_atr = ADX_iter.next_atr_price(extent, next_atr, high, low, close);
-      // printf("updating @ %d next atr (%s) %f", extent, offset_time_str(extent), next_atr);
-
-      // ATR_data[extent] = next_atr;
-      ADX_iter.update_adx(extent, ATR_data, ADX_dx, ADX_plus_di, ADX_minus_di, high, low, close);
-      extent--;
-    }
+    ADX_iter.update_adx_data(ATR_data, ADX_dx, ADX_plus_di, ADX_minus_di, high, low, close);
   }
 
   return (rates_total);

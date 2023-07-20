@@ -92,18 +92,21 @@ protected:
     const double points_ratio;
 
 public:
+    const string symbol;
+    const int timeframe;
+
     int ema_period;
     int ema_shift;
     datetime latest_quote_dt;
 
-    ATRIter(int _ema_period, int _ema_shift = 1) : ema_period(_ema_period), ema_shift(_ema_shift), ema_shifted_period(_ema_period - _ema_shift), points_ratio(_Point), latest_quote_dt(0){};
+    ATRIter(int _ema_period, int _ema_shift = 1, string _symbol = NULL, int _timeframe = EMPTY) : ema_period(_ema_period), ema_shift(_ema_shift), ema_shifted_period(_ema_period - _ema_shift), points_ratio(_Point), symbol(symbol == NULL ? _Symbol : _symbol), timeframe(_timeframe == EMPTY ? _Period : _timeframe), latest_quote_dt(0){};
 
-    ATRIter(int _ema_period, double _points_ratio, int _ema_shift = 1) : ema_period(_ema_period), ema_shift(_ema_shift), ema_shifted_period(_ema_period - _ema_shift), points_ratio(_points_ratio), latest_quote_dt(0){};
+    ATRIter(int _ema_period, double _points_ratio, int _ema_shift = 1, string _symbol = NULL, int _timeframe = EMPTY) : ema_period(_ema_period), ema_shift(_ema_shift), ema_shifted_period(_ema_period - _ema_shift), points_ratio(_points_ratio), symbol(symbol == NULL ? _Symbol : _symbol), timeframe(_timeframe == EMPTY ? _Period : _timeframe), latest_quote_dt(0){};
 
     const int latest_quote_offset()
     {
-        return iBarShift(_Symbol, _Period, latest_quote_dt, false);
-    }
+        return iBarShift(symbol, timeframe, latest_quote_dt, false);
+    };
 
     double points_to_price(const double points)
     {
@@ -115,7 +118,7 @@ public:
         {
             return points * points_ratio;
         }
-    }
+    };
 
     double price_to_points(const double price)
     {
@@ -127,7 +130,7 @@ public:
         {
             return price / points_ratio;
         }
-    }
+    };
 
     double next_tr_price(const int idx, const double &high[], const double &low[], const double &close[])
     {
@@ -137,34 +140,34 @@ public:
         const double cur_low = low[idx];
         //// simplified calculation [Wik]
         return MathMax(cur_high, prev_close) - MathMin(cur_low, prev_close);
-    }
+    };
 
     double initial_atr_price(int extent, const double &high[], const double &low[], const double &close[])
     {
         double atr_sum = high[extent] - low[extent];
-        // printf("initial atr sum [%d] %f", extent, atr_sum);
+        DEBUG("initial atr sum [%d] %f", extent, atr_sum);
         for (int n = 1; n < ema_period; n++)
         {
             atr_sum += next_tr_price(--extent, high, low, close);
-            // printf("initial atr sum [%d] %f", extent, atr_sum);
+            DEBUG("initial atr sum [%d] %f", extent, atr_sum);
         }
         return atr_sum / ema_period;
-    }
+    };
 
     double initial_atr_points(int extent, const double &high[], const double &low[], const double &close[])
     {
         return price_to_points(initial_atr_price(extent, high, low, close));
-    }
+    };
 
     double next_atr_price(const int idx, const double prev_price, const double &high[], const double &low[], const double &close[])
     {
         return ((prev_price * ema_shifted_period) + (next_tr_price(idx, high, low, close) * ema_shift)) / ema_period;
-    }
+    };
 
     double next_atr_points(const int idx, const double prev_points, const double &high[], const double &low[], const double &close[])
     {
         return price_to_points(next_atr_price(idx, points_to_price(prev_points), high, low, close));
-    }
+    };
 
     void initialize_atr_points(int extent, double &atr[], const double &high[], const double &low[], const double &close[])
     {
@@ -178,18 +181,23 @@ public:
             last_atr = next_atr_price(--extent, last_atr, high, low, close);
             atr[extent] = price_to_points(last_atr);
         }
-        latest_quote_dt = iTime(_Symbol, _Period, __latest__);
+        latest_quote_dt = iTime(symbol, timeframe, __latest__);
     };
 
-    void update_atr_points(double &atr[], const double &high[], const double &low[], const double &close[]) {
-        int extent = latest_quote_offset();
-        double latest_atr = atr[extent + 1];        
-        while (extent != -1) {
+    void update_atr_points(double &atr[], const double &high[], const double &low[], const double &close[])
+    {
+        // plus one, plus two to ensure the previous ATR is recalculated from final market quote,
+        // mainly when the previous ATR was calculated at offset 0
+        int extent = latest_quote_offset() + 1;
+        double latest_atr = atr[extent + 1];
+        while (extent != -1)
+        {
             latest_atr = next_atr_points(extent, latest_atr, high, low, close);
             atr[extent] = latest_atr;
             extent--;
         }
-    }
+        latest_quote_dt = iTime(symbol, timeframe, 0);
+    };
 };
 
 #endif

@@ -23,22 +23,32 @@ protected:
     ADXQuote adxq;
 
 public:
-    ADXIter(int period, int period_shift = 1) : ATRIter(period, period_shift)
+    // Implementation Notes:
+    // - designed for application onto MT4 time-series data
+    // - higher period shift => indicator will generally be more responsive
+    //   to present market characteristics, even in event of a market rate spike
+    // - period_shift should always be provided as < period
+    ADXIter(int period, int period_shift = 1, string _symbol = NULL, int _timeframe = EMPTY) : ATRIter(period, period_shift, _symbol, _timeframe)
     {
         adxq = ADXQuote();
     };
-    ~ADXIter() {
-        delete &adxq;
-    }
 
-    void prepare_next_iter(const double atr_price, const double dx, const double plus_di, const double minus_di) {
+    ~ADXIter()
+    {
+        delete &adxq;
+    };
+
+    void prepare_next_pass(const double atr_price, const double dx)
+    {
+        // set the current ATR and previous DX
+        //
+        // called generally before any first iterating call to bind_adx_ema()
+        //
+        // this is a convenience method. iterators should update adxq.atr_price
+        // internally, after the initial previous-quote seed data.
         adxq.atr_price = atr_price;
         adxq.dx = dx;
-        adxq.plus_di = plus_di;
-        adxq.minus_di = minus_di;
-    }
-
-    // designed for application onto MT4 time-series data
+    };
 
     double plus_dm_movement(const int idx, const double &high[], const double &low[])
     {
@@ -50,46 +60,41 @@ public:
         return low[idx + 1] - low[idx];
     };
 
-    void bind_adx_quote(const int idx, /* const double prev_atr_price ,*/ const double &high[], const double &low[], const double &close[])
+    void bind_adx_quote(const int idx, const double &high[], const double &low[], const double &close[])
     {
+        // Implementation Notes:
+        //
+        // - current ATR must be initialized externally onto adxq
+        //   cf. prepare_next_pass(), used in methods defined below
+        //   before calling bind_adx_ema()
+
         double sm_plus_dm = __dblzero__;
         double sm_minus_dm = __dblzero__;
-
         double plus_dm = __dblzero__;
         double minus_dm = __dblzero__;
 
-        double sm_atr = __dblzero__;
+        double atr_cur = adxq.atr_price;
 
-        // double next_atr = prev_atr_price;
-        //// ATR smoothing not required
-        // double next_atr = adxq.atr_period_start;
-        double next_atr = adxq.atr_price;
+        DEBUG("ATR at bind_adx_quote [%d] %s : %f", idx, offset_time_str(idx), atr_cur);
 
-        DEBUG("ATR at bind ADX quote [%d] %s : %f", idx, offset_time_str(idx), next_atr);
-        DEBUG("Start bind_adx_quote MA at %d",  idx + ema_period);
-
-        if (next_atr == 0)
+        if (atr_cur == 0)
         {
-            printf("zero initial next_atr [%d] %s", idx, offset_time_str(idx));
+            printf("zero initial ATR [%d] %s", idx, offset_time_str(idx));
+        }
+        else if (atr_cur < 0)
+        {
+            printf("negative ATR [%d] %s", idx, offset_time_str(idx));
         }
         else
         {
-            //// DEBUG
-            // printf("initial next_atr [%d] %s", idx, offset_time_str(idx));
+            DEBUG("initial ATR [%d] %s", idx, offset_time_str(idx));
         }
+
         // https://en.wikipedia.org/wiki/Average_directional_movement_index
+        //
+        // this implementation does not provide additional smoothing of the EMA
         for (int offset = idx + ema_period; offset >= idx; offset--)
         {
-            //// ATR smoothing not reuqired
-            // next_atr = next_atr_price(offset, next_atr, high, low, close);
-            // ^ FIXME not actually usable here, unless the prev_atr_price
-            //  was from offset idx + ema_period
-            ////
-            // printf("next_atr [%d] %s", offset, offset_time_str(offset)); // DEBUG
-            // sm_atr += next_atr;
-
-            // printf("thunk %d", offset);
-
             const double mov_plus = plus_dm_movement(offset, high, low);
             const double mov_minus = minus_dm_movement(offset, high, low);
             plus_dm = mov_plus > 0 && mov_plus > mov_minus ? mov_plus : __dblzero__;
@@ -98,32 +103,21 @@ public:
             sm_minus_dm += minus_dm;
         }
 
-        // https://www.investopedia.com/terms/a/adx.asp ...  (??)
+        // https://www.investopedia.com/terms/a/adx.asp ...
         sm_plus_dm = sm_plus_dm - (sm_plus_dm / ema_period) + plus_dm;
         sm_minus_dm = sm_minus_dm - (sm_minus_dm / ema_period) + minus_dm;
         //// ^ results in very large values for +DI/-DI
         /// or ...
         sm_plus_dm /= ema_period;
         sm_minus_dm /= ema_period;
-        /// ^ also too-large values, if the MA is applied * 100
-        /// though less so by an order of manitude ...
-        ///// or both ... 
-        //// FIXME still sometimes results in +DI / -DI greater than 100
-
-        //// ATR smoothing not required
-        // sm_atr /= ema_period;
-        sm_atr = next_atr;
-        if (sm_atr == 0)
-        {
-            printf("zero sm_atr [%d] %s", idx, offset_time_str(idx));
-        }
-        else if (sm_atr < 0)
-        {
-            printf("negative sm_atr [%d] %s", idx, offset_time_str(idx));
-        }
-
-        const double plus_di = (sm_plus_dm / sm_atr) * 100;
-        const double minus_di = (sm_minus_dm / sm_atr) * 100;
+        /// ^ also too-large values, once the EMA is applied * 100
+        /// though less so by an order of magnitude ...
+        /// so both ...
+        //
+        /// FIXME sometimes may result in +DI / -DI greater than 100
+        
+        const double plus_di = (sm_plus_dm / atr_cur) * 100;
+        const double minus_di = (sm_minus_dm / atr_cur) * 100;
 
         if (plus_di == 0 && minus_di == 0)
         {
@@ -135,103 +129,115 @@ public:
         adxq.plus_di = plus_di;
         adxq.minus_di = minus_di;
         const double di_sum = plus_di + minus_di;
-        if (di_sum == 0) {
+        if (di_sum == 0)
+        {
             // likewise reached in XAGUSD
-            printf("calculated zero di sum at %s", offset_time_str(idx));
+            Print("calculated zero di sum at " + offset_time_str(idx));
             adxq.dx = __dblzero__;
-        } else {
+        }
+        else
+        {
             adxq.dx = fabs((plus_di - minus_di) / di_sum) * 100;
         }
-        adxq.atr_price = next_atr;
     };
 
     void bind_adx_ema(const int idx, const double &high[], const double &low[], const double &close[])
     {
-        // reusing previous adxq values (!)
+        /// reusing previous adxq values, before the call to bind_adx_quote
         double dx = adxq.dx;
-        double plus_di = adxq.plus_di;
-        double minus_di = adxq.minus_di;
-        // binding current to adxq
+        /// TBD also bind EMA for +DI/-DI
+        /// Side effect: EMA for +DI/-DI makes it difficult to spot indication of 
+        /// crossover within the indicator graph
+        // double plus_di = adxq.plus_di;
+        // double minus_di = adxq.minus_di;
+
+        /// binding current to adxq
         bind_adx_quote(idx, high, low, close);
+        /// binding EMA to adxq
         adxq.dx = ((dx * ema_shifted_period) + (adxq.dx * ema_shift)) / ema_period;
-    }
+        // adxq.plus_di = ((plus_di * ema_shifted_period) + (adxq.plus_di * ema_shift)) / ema_period;
+        // adxq.minus_di = ((plus_di * ema_shifted_period) + (adxq.minus_di * ema_shift)) / ema_period;
+    };
 
-    void update_adx(const int idx, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
+    void update_adx_ema(const int idx, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
     {
-        // FIXME this still uses the previous ATR smoothing approach
-
         // this assumes adxq was initialized for the first adx
-
-        /*
-        const double atr = adxq.atr_period_start;
-        if (atr == 0)
-        {
-            printf("Invalid atr_period_start in libADX @ %d", idx);
-            return;
-        }
-        */
-
-        // bind_adx_quote(idx, /* atr, */ high, low, close); // FIXME remove atr arg
+        // - for initial values, see initial_atr_price()
+        // - for updates, see prepare_next_pass()
+        //
         bind_adx_ema(idx, high, low, close);
-        // printf("! ADX [%d] %f %f/%f", idx, adxq.dx, adxq.plus_di, adxq.minus_di); // [X]
+        DEBUG("[%d] DX %f DI +/- %f/%f", idx, adxq.dx, adxq.plus_di, adxq.minus_di);
         dx[idx] = adxq.dx;
         plus_di[idx] = adxq.plus_di;
         minus_di[idx] = adxq.minus_di;
         atr_data[idx] = adxq.atr_price;
     };
 
-    void initialize_adx(int extent, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
+    void initialize_adx_data(int extent, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
     {
-        // printf("ema_shifted_period %d", ema_shifted_period);
+        DEBUG("Initalizing ADX from quote %s [%d]", offset_time_str(extent), extent);
+        const int __latest__ = 0;
+
         double next_atr = initial_atr_price(--extent, high, low, close);
-        extent -= ema_period; /// for initial ATR
+
+        extent -= ema_period; // for initial ATR
         if (next_atr == 0)
         {
             Alert("Initial ATR calculation failed");
             return;
         }
-        atr_data[extent] = next_atr; // FIXME no longer used
+        atr_data[extent] = next_atr;
 
-        // Alert("Initial ATR %f", next_atr);
+        DEBUG("Initial ATR at %s [%d] %f", offset_time_str(extent), extent, next_atr);
 
-        printf("Initial ATR at %s [%d] %f", offset_time_str(extent), extent, next_atr);
-        // FIXME this does not need to store a sequence of atr values.
-        // only the most recent ATR at some chart tick ...
-        
         extent--; // for ADX DM
         next_atr = next_atr_price(extent, next_atr, high, low, close);
-        printf("Second ATR at %s [%d] %f", offset_time_str(extent), extent, next_atr);
 
+        DEBUG("Second ATR at %s [%d] %f", offset_time_str(extent), extent, next_atr);
         adxq.atr_price = next_atr;
+        atr_data[extent] = next_atr;
         bind_adx_quote(extent, high, low, close); // first ADX, no EMA
         dx[extent] = adxq.dx;
         plus_di[extent] = adxq.plus_di;
         minus_di[extent] = adxq.minus_di;
-        printf("Initial ADX at %s [%d] DX %f +DI %f -DI %f", offset_time_str(extent), extent, adxq.dx, adxq.plus_di, adxq.minus_di);
+        DEBUG("Initial ADX at %s [%d] DX %f +DI %f -DI %f", offset_time_str(extent), extent, adxq.dx, adxq.plus_di, adxq.minus_di);
 
-        extent--; // because first ADX quote
-        // next_atr = next_atr_price(extent, high, low, close); // because first adx quote
-        // adxq.atr_price = next_atr; // because first adx quote
+        extent--; // for the first ADX quote
 
-        // adxq.atr_period_start = next_atr; // for ATR smoothing
-        // extent -= ema_period;             // for ATR smoothing
-        while (extent >=     0)               // ?
+        while (extent >= __latest__)
         {
             next_atr = next_atr_price(extent, next_atr, high, low, close);
             adxq.atr_price = next_atr;
-            atr_data[extent] = next_atr; // FIXME no longer used
-
-            update_adx(extent, atr_data, dx, plus_di, minus_di, high, low, close);
-            // printf("ADX [%d] %f %f/%f", extent, dx[extent], plus_di[extent], minus_di[extent]);
-            /* for ATR smoothing in ADX
-            if (extent != 0)
-            {
-                next_atr = next_atr_price(extent, next_atr, high, low, close); // ...
-                adxq.atr_period_start = next_atr;
-            }
-            */
+            update_adx_ema(extent, atr_data, dx, plus_di, minus_di, high, low, close);
             extent--;
         }
+        latest_quote_dt = iTime(symbol, timeframe, __latest__);
+    };
+
+    void update_adx_data(double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
+    {
+        // plus one, plus two to ensure the previous ADX is recalculated from final market quote,
+        // mainly when the previous ADX was calculated at offset 0
+        int idx = latest_quote_offset() + 1;
+        const int prev_idx = idx + 1;
+        const int __latest__ = 0;
+
+        double next_atr = atr_data[prev_idx];
+        const double prev_dx = dx[prev_idx];
+        // next_atr here should stay the same across ticks
+        DEBUG("updating from %s [%d] initial ATR %f DX %f", offset_time_str(prev_idx), prev_idx, next_atr, prev_dx);
+        prepare_next_pass(next_atr, prev_dx);
+
+        while (idx >= __latest__)
+        {
+            next_atr = next_atr_price(idx, next_atr, high, low, close);
+            DEBUG("updating at %s [%d] using ATR %f", idx, offset_time_str(idx), next_atr);
+            // set the current ATR
+            adxq.atr_price = next_atr;
+            update_adx_ema(idx, atr_data, dx, plus_di, minus_di, high, low, close);
+            idx--;
+        }
+        latest_quote_dt = iTime(symbol, timeframe, __latest__);
     };
 };
 
