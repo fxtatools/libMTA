@@ -6,6 +6,230 @@
 
 #include <dlib/Lang/pointer.mqh>
 
+#ifndef QUOTE_PADDING
+#define QUOTE_PADDING 1024
+#endif
+
+class RateBuffer
+{
+
+protected:
+    int extent_scale_padding(const int ext_diff)
+    {
+        return (int)((ceil(ext_diff / QUOTE_PADDING) + 1) * QUOTE_PADDING);
+    }
+
+public:
+    int next_extent;
+    double data[];
+
+    RateBuffer(int _extent)
+    {
+        next_extent = 0;
+        setExtent(_extent);
+    }
+    ~RateBuffer()
+    {
+        ArrayFree(data);
+    }
+
+    bool setExtent(int len)
+    {
+        if (len > next_extent)
+        {
+            const int next = next_extent + extent_scale_padding(len - next_extent);
+            const int rslt = ArrayResize(data, next);
+            if (rslt == -1)
+            {
+                next_extent = -1;
+                return false;
+            }
+            next_extent = next;
+        }
+        return true;
+    }
+
+    bool reduceExtent(int len)
+    {
+        const int reduced = extent_scale_padding(len);
+        const int rslt = ArrayResize(data, reduced);
+        if (rslt == -1)
+        {
+            next_extent = -1;
+            return false;
+        }
+        else
+        {
+            next_extent = reduced;
+            return true;
+        }
+    }
+
+    bool setAsSeries(const bool as_series = true)
+    {
+        return ArraySetAsSeries(data, as_series);
+    }
+};
+
+class QuoteMgrOHLC : public Chartable
+{
+
+public:
+    RateBuffer *open_buffer;
+    RateBuffer *high_buffer;
+    RateBuffer *low_buffer;
+    RateBuffer *close_buffer;
+
+    ~QuoteMgrOHLC()
+    {
+        if (open_buffer != NULL)
+            delete open_buffer;
+        if (high_buffer != NULL)
+            delete high_buffer;
+        if (low_buffer != NULL)
+            delete low_buffer;
+        if (close_buffer != NULL)
+            delete close_buffer;
+    };
+
+    QuoteMgrOHLC(const int _extent, const bool use_open = true, const bool use_high = true, const bool use_low = true, const bool use_close = true, const bool as_series = true, const string _symbol = NULL, const int _timeframe = EMPTY) : Chartable(_symbol, _timeframe)
+    {
+        if (use_open)
+        {
+            open_buffer = new RateBuffer(_extent);
+            if (open_buffer.next_extent == -1 || !open_buffer.setAsSeries(as_series))
+            {
+                open_buffer = NULL; // FIXME error
+            }
+        }
+        else
+            open_buffer = NULL;
+
+        if (use_high)
+        {
+            high_buffer = new RateBuffer(_extent);
+            if (high_buffer.next_extent == -1 || !high_buffer.setAsSeries(as_series))
+            {
+                high_buffer = NULL; // FIXME error
+            }
+        }
+        else
+            high_buffer = NULL;
+
+        if (use_low)
+        {
+            low_buffer = new RateBuffer(_extent);
+            if (low_buffer.next_extent == -1 || !low_buffer.setAsSeries(as_series))
+            {
+                low_buffer = NULL; // FIXME error
+            }
+        }
+        else
+            low_buffer = NULL;
+
+        if (use_close)
+        {
+            close_buffer = new RateBuffer(_extent);
+            if (close_buffer.next_extent == -1 || !close_buffer.setAsSeries(as_series))
+            {
+                close_buffer = NULL; // FIXME error
+            }
+        }
+        else
+            close_buffer = NULL;
+    };
+
+    bool setExtent(int extent)
+    {
+        if (open_buffer != NULL)
+        {
+            if (!open_buffer.setExtent(extent))
+                return false;
+        }
+        if (high_buffer != NULL)
+        {
+            if (!high_buffer.setExtent(extent))
+                return false;
+        }
+        if (low_buffer != NULL)
+        {
+            if (!low_buffer.setExtent(extent))
+                return false;
+        }
+        if (close_buffer != NULL)
+        {
+            if (!close_buffer.setExtent(extent))
+                return false;
+        }
+        return true;
+    };
+
+    bool reduceExtent(int len)
+    {
+        if (open_buffer != NULL)
+        {
+            if (!open_buffer.reduceExtent(len))
+                return false;
+        }
+        if (high_buffer != NULL)
+        {
+            if (!high_buffer.reduceExtent(len))
+                return false;
+        }
+        if (low_buffer != NULL)
+        {
+            if (!low_buffer.reduceExtent(len))
+                return false;
+        }
+        if (close_buffer != NULL)
+        {
+            if (!close_buffer.reduceExtent(len))
+                return false;
+        }
+        return true;
+    }
+
+    // FIXME note ema_period padding required for data update under ADXIter
+
+    bool copyRates(const int _extent)
+    {
+        if (!setExtent(_extent))
+            return false;
+        if (open_buffer != NULL)
+        {
+            int rslt = CopyOpen(symbol, timeframe, 0, _extent, open_buffer.data);
+            if (rslt == -1)
+                return false;
+        }
+        if (high_buffer != NULL)
+        {
+            int rslt = CopyHigh(symbol, timeframe, 0, _extent, high_buffer.data);
+            if (rslt == -1)
+                return false;
+        }
+        if (low_buffer != NULL)
+        {
+            int rslt = CopyLow(symbol, timeframe, 0, _extent, low_buffer.data);
+            if (rslt == -1)
+                return false;
+        }
+        if (close_buffer != NULL)
+        {
+            int rslt = CopyClose(symbol, timeframe, 0, _extent, close_buffer.data);
+            if (rslt == -1)
+                return false;
+        }
+        return true;
+    };
+};
+
+class QuoteMgrHLC : public QuoteMgrOHLC
+{
+    // FIXME move to :Include/libEA/rates.mq4
+public:
+    QuoteMgrHLC(const int _extent, const string _symbol = NULL, const int _timeframe = EMPTY) : QuoteMgrOHLC(_extent, false, true, true, true, true, _symbol, _timeframe){};
+};
+
 class ADXIter : public ATRIter
 {
 
@@ -115,7 +339,7 @@ public:
         /// so both ...
         //
         /// FIXME sometimes may result in +DI / -DI greater than 100
-        
+
         const double plus_di = (sm_plus_dm / atr_cur) * 100;
         const double minus_di = (sm_minus_dm / atr_cur) * 100;
 
@@ -146,7 +370,7 @@ public:
         /// reusing previous adxq values, before the call to bind_adx_quote
         double dx = adxq.dx;
         /// TBD also bind EMA for +DI/-DI
-        /// Side effect: EMA for +DI/-DI makes it difficult to spot indication of 
+        /// Side effect: EMA for +DI/-DI makes it difficult to spot indication of
         /// crossover within the indicator graph
         // double plus_di = adxq.plus_di;
         // double minus_di = adxq.minus_di;
@@ -173,7 +397,7 @@ public:
         atr_data[idx] = adxq.atr_price;
     };
 
-    void initialize_adx_data(int extent, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
+    datetime initialize_adx_data(int extent, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
     {
         DEBUG("Initalizing ADX from quote %s [%d]", offset_time_str(extent), extent);
         const int __latest__ = 0;
@@ -184,7 +408,7 @@ public:
         if (next_atr == 0)
         {
             Alert("Initial ATR calculation failed");
-            return;
+            return EMPTY;
         }
         atr_data[extent] = next_atr;
 
@@ -212,9 +436,23 @@ public:
             extent--;
         }
         latest_quote_dt = iTime(symbol, timeframe, __latest__);
+        return latest_quote_dt;
     };
 
-    void update_adx_data(double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
+    datetime initialize_adx_data(QuoteMgrOHLC &quote_mgr, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const int extent = EMPTY)
+    {
+        // for data initialization within EAs
+        const int nrquotes = extent == EMPTY ? iBars(symbol, timeframe) : extent;
+        DEBUG("Initializing for quote manager with %d quotes", nrquotes);
+        if (!quote_mgr.copyRates(nrquotes))
+        {
+            printf("Failed to copy %d initial rates to quote manager", nrquotes);
+            return EMPTY;
+        }
+        return initialize_adx_data(nrquotes, atr_data, dx, plus_di, minus_di, quote_mgr.high_buffer.data, quote_mgr.low_buffer.data, quote_mgr.close_buffer.data);
+    }
+
+    datetime update_adx_data(double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
     {
         // plus one, plus two to ensure the previous ADX is recalculated from final market quote,
         // mainly when the previous ADX was calculated at offset 0
@@ -231,14 +469,28 @@ public:
         while (idx >= __latest__)
         {
             next_atr = next_atr_price(idx, next_atr, high, low, close);
-            DEBUG("updating at %s [%d] using ATR %f", idx, offset_time_str(idx), next_atr);
+            DEBUG("updating at %s [%d] using ATR %f", offset_time_str(idx), idx, next_atr);
             // set the current ATR
             adxq.atr_price = next_atr;
             update_adx_ema(idx, atr_data, dx, plus_di, minus_di, high, low, close);
             idx--;
         }
         latest_quote_dt = iTime(symbol, timeframe, __latest__);
+        return latest_quote_dt;
     };
+
+    datetime update_adx_data(QuoteMgrOHLC &quote_mgr, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[])
+    {
+        // for data update within EAs
+        const int extent = latest_quote_offset() + ema_period + 3;
+        DEBUG("Updating for %d quotes", extent);
+        if (!quote_mgr.copyRates(extent))
+        {
+            printf("Failed to copy %d rates to quote manager", extent);
+            return EMPTY;
+        }
+        return update_adx_data(atr_data, dx, plus_di, minus_di, quote_mgr.high_buffer.data, quote_mgr.low_buffer.data, quote_mgr.close_buffer.data);
+    }
 };
 
 #endif

@@ -24,6 +24,9 @@
 extern const int iadx_period = 20; // iADX EMA Period
 extern const int iadx_period_shift = 1; // EMA Period shift
 
+extern const bool iadx_test_quote_mgr = false; // Test for Quote Manager
+static bool quotes_reduced = false;
+
 #include <../Libraries/libMTA/libADX.mq4>
 
 double ADX_dx[];
@@ -32,6 +35,8 @@ double ADX_minus_di[];
 double ATR_data[]; // FIXME no longer used
 
 ADXIter ADX_iter(iadx_period, iadx_period_shift);
+
+QuoteMgrHLC* hlc_quote_mgr;
 
 static int __initial_rates_total__ = EMPTY;
 
@@ -77,7 +82,11 @@ int OnInit()
   ArraySetAsSeries(ADX_dx, true);
   ArraySetAsSeries(ADX_plus_di, true);
   ArraySetAsSeries(ADX_minus_di, true);
-  ArraySetAsSeries(ATR_data, true); // FIXME no longer used
+  ArraySetAsSeries(ATR_data, true);
+
+  if(iadx_test_quote_mgr) {
+    hlc_quote_mgr = new QuoteMgrHLC(iBars(_Symbol, _Period), _Symbol, _Period);
+  }
 
   return (INIT_SUCCEEDED);
 }
@@ -94,25 +103,40 @@ int OnCalculate(const int rates_total,
                 const int &spread[])
 {
   iadx_pre_update(rates_total, prev_calculated);
-
-  // FIXME the chart may need to be reinitialized when scrolling back in chart history
-
-  /*
-  if (prev_calculated != rates_total) {
-    // debug
-    printf("rates_total %d, prev_calculated %d", rates_total, prev_calculated);
-  }
-  */
-
   if (prev_calculated == 0)
   {
     printf("initializing for %d quotes", rates_total);
-    ADX_iter.initialize_adx_data(rates_total, ATR_data, ADX_dx, ADX_plus_di, ADX_minus_di, high, low, close);
+    if(iadx_test_quote_mgr) {
+      hlc_quote_mgr.setExtent(rates_total);
+      ADX_iter.initialize_adx_data(*hlc_quote_mgr, ATR_data, ADX_dx, ADX_plus_di, ADX_minus_di, rates_total);
+      quotes_reduced = false;
+    } else {
+      ADX_iter.initialize_adx_data(rates_total, ATR_data, ADX_dx, ADX_plus_di, ADX_minus_di, high, low, close);
+    }
   }
   else
   {
-    ADX_iter.update_adx_data(ATR_data, ADX_dx, ADX_plus_di, ADX_minus_di, high, low, close);
+    if(iadx_test_quote_mgr) {
+      if (!quotes_reduced) {
+        // TBD, Nearly arbitrary extent after [re]initialization of indicator data
+        hlc_quote_mgr.reduceExtent(WindowBarsPerChart());
+        quotes_reduced = true;
+      }
+      ADX_iter.update_adx_data(*hlc_quote_mgr, ATR_data, ADX_dx, ADX_plus_di, ADX_minus_di);
+    } else {
+      ADX_iter.update_adx_data(ATR_data, ADX_dx, ADX_plus_di, ADX_minus_di, high, low, close);
+    }
   }
 
   return (rates_total);
+}
+
+void OnDeinit(const int dicode) {
+  delete &ADX_iter;
+  ArrayFree(ATR_data);
+  ArrayFree(ADX_dx);
+  ArrayFree(ADX_plus_di);
+  ArrayFree(ADX_minus_di);
+  if(iadx_test_quote_mgr)
+    delete hlc_quote_mgr;
 }

@@ -62,3 +62,8 @@ int OnCalculate(const int rates_total,
 
   return (rates_total);
 }
+
+void OnDeinit(const int dicode) {
+  delete &ATR_iter;
+  ArrayFree(ATR_data);
+}
