@@ -7,7 +7,7 @@
 #include <dlib/Lang/pointer.mqh>
 
 #ifndef QUOTE_PADDING
-#define QUOTE_PADDING 1024
+#define QUOTE_PADDING 128
 #endif
 
 class RateBuffer
@@ -20,51 +20,65 @@ protected:
     }
 
 public:
-    int next_extent;
+    int expand_extent;
+    int extent;
     double data[];
 
-    RateBuffer(int _extent)
+    RateBuffer(const int _extent = 0, const bool as_series = true)
     {
-        next_extent = 0;
+        expand_extent = 0;
         setExtent(_extent);
-    }
+        setAsSeries(as_series);
+    };
     ~RateBuffer()
     {
         ArrayFree(data);
-    }
+    };
 
+    // increase the length of the data buffer, for the provdied data length
+    // within a factor of QUOTE_PADDING
     bool setExtent(int len)
     {
-        if (len > next_extent)
+        if (len == extent)
         {
-            const int next = next_extent + extent_scale_padding(len - next_extent);
+            return true;
+        }
+        else if (len >= expand_extent)
+        {
+            const int next = expand_extent + extent_scale_padding(len - expand_extent);
             const int rslt = ArrayResize(data, next);
             if (rslt == -1)
             {
-                next_extent = -1;
+                expand_extent = -1;
                 return false;
             }
-            next_extent = next;
+            expand_extent = next;
         }
+        extent = len;
         return true;
     }
 
+    // reduce the length of the data buffer, for the provdied data length
+    // within a factor of QUOTE_PADDING
     bool reduceExtent(int len)
     {
         const int reduced = extent_scale_padding(len);
         const int rslt = ArrayResize(data, reduced);
         if (rslt == -1)
         {
-            next_extent = -1;
+            expand_extent = -1;
             return false;
         }
         else
         {
-            next_extent = reduced;
+            extent = len;
+            expand_extent = reduced;
             return true;
         }
     }
 
+    // configure the data buffer to be accessed as (or not as) MetaTrader
+    // time-series data
     bool setAsSeries(const bool as_series = true)
     {
         return ArraySetAsSeries(data, as_series);
@@ -79,6 +93,7 @@ public:
     RateBuffer *high_buffer;
     RateBuffer *low_buffer;
     RateBuffer *close_buffer;
+    int extent;
 
     ~QuoteMgrOHLC()
     {
@@ -92,12 +107,12 @@ public:
             delete close_buffer;
     };
 
-    QuoteMgrOHLC(const int _extent, const bool use_open = true, const bool use_high = true, const bool use_low = true, const bool use_close = true, const bool as_series = true, const string _symbol = NULL, const int _timeframe = EMPTY) : Chartable(_symbol, _timeframe)
+    QuoteMgrOHLC(const int _extent, const bool use_open = true, const bool use_high = true, const bool use_low = true, const bool use_close = true, const bool as_series = true, const string _symbol = NULL, const int _timeframe = EMPTY) : extent(_extent), Chartable(_symbol, _timeframe)
     {
         if (use_open)
         {
             open_buffer = new RateBuffer(_extent);
-            if (open_buffer.next_extent == -1 || !open_buffer.setAsSeries(as_series))
+            if (open_buffer.expand_extent == -1 || !open_buffer.setAsSeries(as_series))
             {
                 open_buffer = NULL; // FIXME error
             }
@@ -108,7 +123,7 @@ public:
         if (use_high)
         {
             high_buffer = new RateBuffer(_extent);
-            if (high_buffer.next_extent == -1 || !high_buffer.setAsSeries(as_series))
+            if (high_buffer.expand_extent == -1 || !high_buffer.setAsSeries(as_series))
             {
                 high_buffer = NULL; // FIXME error
             }
@@ -119,7 +134,7 @@ public:
         if (use_low)
         {
             low_buffer = new RateBuffer(_extent);
-            if (low_buffer.next_extent == -1 || !low_buffer.setAsSeries(as_series))
+            if (low_buffer.expand_extent == -1 || !low_buffer.setAsSeries(as_series))
             {
                 low_buffer = NULL; // FIXME error
             }
@@ -130,7 +145,7 @@ public:
         if (use_close)
         {
             close_buffer = new RateBuffer(_extent);
-            if (close_buffer.next_extent == -1 || !close_buffer.setAsSeries(as_series))
+            if (close_buffer.expand_extent == -1 || !close_buffer.setAsSeries(as_series))
             {
                 close_buffer = NULL; // FIXME error
             }
@@ -139,28 +154,29 @@ public:
             close_buffer = NULL;
     };
 
-    bool setExtent(int extent)
+    bool setExtent(int _extent)
     {
         if (open_buffer != NULL)
         {
-            if (!open_buffer.setExtent(extent))
+            if (!open_buffer.setExtent(_extent))
                 return false;
         }
         if (high_buffer != NULL)
         {
-            if (!high_buffer.setExtent(extent))
+            if (!high_buffer.setExtent(_extent))
                 return false;
         }
         if (low_buffer != NULL)
         {
-            if (!low_buffer.setExtent(extent))
+            if (!low_buffer.setExtent(_extent))
                 return false;
         }
         if (close_buffer != NULL)
         {
-            if (!close_buffer.setExtent(extent))
+            if (!close_buffer.setExtent(_extent))
                 return false;
         }
+        extent = _extent;
         return true;
     };
 
@@ -186,11 +202,12 @@ public:
             if (!close_buffer.reduceExtent(len))
                 return false;
         }
+        extent = len;
         return true;
     }
 
-    // FIXME note ema_period padding required for data update under ADXIter
-
+    // copy rates to the provided extent for this Quote Manager, for any initialized
+    // open, high, low, and close buffers
     bool copyRates(const int _extent)
     {
         if (!setExtent(_extent))
@@ -237,11 +254,10 @@ protected:
     class ADXQuote
     {
     public:
-        double atr_period_start; // in ...
-        double atr_price;
-        double dx;
-        double plus_di;
-        double minus_di;
+        double atr_price; // generally used as an input value, current ATR
+        double dx; // output value for non-EMA DX, input and output value for EMA DX
+        double plus_di; // output value
+        double minus_di; // output value
         ADXQuote() : atr_price(-0.0), dx(-0.0), plus_di(-0.0), minus_di(-0.0){};
     };
     ADXQuote adxq;
@@ -262,6 +278,8 @@ public:
         delete &adxq;
     };
 
+    // Initlaize the ADXQuote adxq for the previous ATR and previous DX at an arbitrary
+    // data index
     void prepare_next_pass(const double atr_price, const double dx)
     {
         // set the current ATR and previous DX
@@ -274,23 +292,38 @@ public:
         adxq.dx = dx;
     };
 
+    // Calculate the +DI directional movement at a given index, using the time-series
+    // high and low quote data.
+    //
+    // idx must be less than the length of the time-series data minus one.
     double plus_dm_movement(const int idx, const double &high[], const double &low[])
     {
         return high[idx] - high[idx + 1];
     };
 
+    // Calculate the -DI directional movement at a given index, using the time-series
+    // high and low quote data.
+    //
+    // idx must be less than the length of the time-series data minus one.
     double minus_dm_movement(const int idx, const double &high[], const double &low[])
     {
         return low[idx + 1] - low[idx];
     };
 
+    // calculate the non-EMA ADX DX, +DI and -DI at a provided index, using time-series
+    // high, low, and close data
+    //
+    // This method assumes adxq.atr_price has been initialized to the ATR at idx,
+    // externally
+    //
+    // Fields of adxq will be initialized for ATR, DX, +DI and -DI values, without DX EMA
     void bind_adx_quote(const int idx, const double &high[], const double &low[], const double &close[])
     {
         // Implementation Notes:
         //
         // - current ATR must be initialized externally onto adxq
         //   cf. prepare_next_pass(), used in methods defined below
-        //   before calling bind_adx_ema()
+        //   e.g before calling bind_adx_ema()
 
         double sm_plus_dm = __dblzero__;
         double sm_minus_dm = __dblzero__;
@@ -345,9 +378,11 @@ public:
 
         if (plus_di == 0 && minus_di == 0)
         {
-            // reached fairly often, in XAGUSD M1
-            // not so much elsewhere
-            Print("zero plus_di, minus_di at " + offset_time_str(idx));
+            // reached e.g in both XAGUSD and AUDCAD M1
+            // not so much elsewhere - zero directional
+            // movement across consecutive chart quotes
+            // within some chart period
+            DEBUG("zero plus_di, minus_di at " + offset_time_str(idx));
         }
 
         adxq.plus_di = plus_di;
@@ -356,7 +391,7 @@ public:
         if (di_sum == 0)
         {
             // likewise reached in XAGUSD
-            Print("calculated zero di sum at " + offset_time_str(idx));
+            DEBUG("calculated zero di sum at " + offset_time_str(idx));
             adxq.dx = __dblzero__;
         }
         else
@@ -365,43 +400,17 @@ public:
         }
     };
 
-    void bind_adx_ema(const int idx, const double &high[], const double &low[], const double &close[])
+    // calculate the first ADX within an extent for time series high, low, and close data.
+    //
+    // returns the index of the first ADX value within this time series.
+    //
+    // This method will initialize the fields of adxq for ATR, DX, +DI and -DI values at 
+    // an index to the provided extent, adjusted for EMA period and directional movement
+    // calculation.
+    //
+    // This method will not produce an EMA for the initial DX value
+    int bind_initial_adx(int extent, const double &high[], const double &low[], const double &close[])
     {
-        /// reusing previous adxq values, before the call to bind_adx_quote
-        double dx = adxq.dx;
-        /// TBD also bind EMA for +DI/-DI
-        /// Side effect: EMA for +DI/-DI makes it difficult to spot indication of
-        /// crossover within the indicator graph
-        // double plus_di = adxq.plus_di;
-        // double minus_di = adxq.minus_di;
-
-        /// binding current to adxq
-        bind_adx_quote(idx, high, low, close);
-        /// binding EMA to adxq
-        adxq.dx = ((dx * ema_shifted_period) + (adxq.dx * ema_shift)) / ema_period;
-        // adxq.plus_di = ((plus_di * ema_shifted_period) + (adxq.plus_di * ema_shift)) / ema_period;
-        // adxq.minus_di = ((plus_di * ema_shifted_period) + (adxq.minus_di * ema_shift)) / ema_period;
-    };
-
-    void update_adx_ema(const int idx, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
-    {
-        // this assumes adxq was initialized for the first adx
-        // - for initial values, see initial_atr_price()
-        // - for updates, see prepare_next_pass()
-        //
-        bind_adx_ema(idx, high, low, close);
-        DEBUG("[%d] DX %f DI +/- %f/%f", idx, adxq.dx, adxq.plus_di, adxq.minus_di);
-        dx[idx] = adxq.dx;
-        plus_di[idx] = adxq.plus_di;
-        minus_di[idx] = adxq.minus_di;
-        atr_data[idx] = adxq.atr_price;
-    };
-
-    datetime initialize_adx_data(int extent, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
-    {
-        DEBUG("Initalizing ADX from quote %s [%d]", offset_time_str(extent), extent);
-        const int __latest__ = 0;
-
         double next_atr = initial_atr_price(--extent, high, low, close);
 
         extent -= ema_period; // for initial ATR
@@ -410,17 +419,80 @@ public:
             Alert("Initial ATR calculation failed");
             return EMPTY;
         }
-        atr_data[extent] = next_atr;
-
+        // atr_data[extent] = next_atr;
         DEBUG("Initial ATR at %s [%d] %f", offset_time_str(extent), extent, next_atr);
 
-        extent--; // for ADX DM
+        extent--; // for ADX DM at start of ema_period
         next_atr = next_atr_price(extent, next_atr, high, low, close);
 
         DEBUG("Second ATR at %s [%d] %f", offset_time_str(extent), extent, next_atr);
         adxq.atr_price = next_atr;
+        // atr_data[extent] = next_atr;
+        bind_adx_quote(extent, high, low, close);
+        return extent;
+    }
+
+    // Bind current ATR, +DI, +DI, and DX EMA at index idx to fields of adxq
+    //
+    // This method assumes adxq was initialized for previous ATR and DX values
+    //
+    // See also:
+    // - bind_initial_adx()
+    void bind_adx_ema(const int idx, const double &high[], const double &low[], const double &close[])
+    {
+        /// Implementation Note: EMA smothing for +DI/-DI at this point
+        /// may produce a side effect of complicating any visual analysis
+        /// of ADX chart lines, insofar as for locating a +DI/-DI crossover
+        /// point.
+        ///
+        /// +DI/-DI values will already be smoothed accross each calculation 
+        /// period, before calculating DX within bind_adx_quote()
+        ///
+        /// This method provides EMA smoothing only for the DX value
+        ///
+
+        /// reusing previous DX from adxq, before the call to bind_adx_quote
+        const double dx = adxq.dx;
+        // set current ATR, using previous
+        const double atr_prev=adxq.atr_price;
+        adxq.atr_price = next_atr_price(idx, atr_prev, high, low, close);
+
+        /// binding current to adxq
+        bind_adx_quote(idx, high, low, close);
+        /// binding DX EMA to adxq
+        adxq.dx = ((dx * ema_shifted_period) + (adxq.dx * ema_shift)) / ema_period;
+    };
+
+    // Set current +DI, -DI, and DX EMA at index idx, for that index within the provided 
+    // ADX data buffers.
+    //
+    // This method assumes adxq was initialized for previous ATR and DX values
+    //
+    // See also:
+    // - bind_initial_adx()
+    void update_adx_ema(const int idx, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
+    {
+        // calculate ADX +DI, -DI, and EMA for DX
+        bind_adx_ema(idx, high, low, close);
+        DEBUG("[%d] DX %f DI +/- %f/%f", idx, adxq.dx, adxq.plus_di, adxq.minus_di);
+        // bind adxq values to data buffers
+        dx[idx] = adxq.dx;
+        plus_di[idx] = adxq.plus_di;
+        minus_di[idx] = adxq.minus_di;
+        atr_data[idx] = adxq.atr_price;
+    };
+
+
+    // Initialize the provided ADX data arrays for ADX from extent to latest == 0
+    //
+    // This method assumes time-series data access for all data arrays.
+    datetime initialize_adx_data(int extent, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
+    {
+        const int __latest__ = 0;
+        extent = bind_initial_adx(extent, high, low, close);
+
+        double next_atr = adxq.atr_price;
         atr_data[extent] = next_atr;
-        bind_adx_quote(extent, high, low, close); // first ADX, no EMA
         dx[extent] = adxq.dx;
         plus_di[extent] = adxq.plus_di;
         minus_di[extent] = adxq.minus_di;
@@ -430,8 +502,6 @@ public:
 
         while (extent >= __latest__)
         {
-            next_atr = next_atr_price(extent, next_atr, high, low, close);
-            adxq.atr_price = next_atr;
             update_adx_ema(extent, atr_data, dx, plus_di, minus_di, high, low, close);
             extent--;
         }
@@ -439,6 +509,11 @@ public:
         return latest_quote_dt;
     };
 
+    // Initialize the provided ADX data arrays for ADX from extent to latest == 0
+    //
+    // This method uses a Quote Manager for access to chart high, low, and close quotes.
+    // This assumes that the Quote Manager was initialized for time-series data access
+    // with high, low, and close rate buffers.
     datetime initialize_adx_data(QuoteMgrOHLC &quote_mgr, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const int extent = EMPTY)
     {
         // for data initialization within EAs
@@ -452,26 +527,26 @@ public:
         return initialize_adx_data(nrquotes, atr_data, dx, plus_di, minus_di, quote_mgr.high_buffer.data, quote_mgr.low_buffer.data, quote_mgr.close_buffer.data);
     }
 
+    // Update the provided ADX data arrays from the most recently calculated extent
+    // to latest == 0
+    //
+    // This method assumes time-series data access for all data arrays.
     datetime update_adx_data(double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
     {
         // plus one, plus two to ensure the previous ADX is recalculated from final market quote,
-        // mainly when the previous ADX was calculated at offset 0
+        // when the previous ADX was calculated at offset 0 => 1
         int idx = latest_quote_offset() + 1;
         const int prev_idx = idx + 1;
         const int __latest__ = 0;
 
-        double next_atr = atr_data[prev_idx];
+        const double prev_atr = atr_data[prev_idx];
         const double prev_dx = dx[prev_idx];
-        // next_atr here should stay the same across ticks
-        DEBUG("updating from %s [%d] initial ATR %f DX %f", offset_time_str(prev_idx), prev_idx, next_atr, prev_dx);
-        prepare_next_pass(next_atr, prev_dx);
+        // prev_atr here should be the same across ticks
+        DEBUG("updating from %s [%d] initial ATR %f DX %f", offset_time_str(prev_idx), prev_idx, prev_atr, prev_dx);
+        prepare_next_pass(prev_atr, prev_dx);
 
         while (idx >= __latest__)
         {
-            next_atr = next_atr_price(idx, next_atr, high, low, close);
-            DEBUG("updating at %s [%d] using ATR %f", offset_time_str(idx), idx, next_atr);
-            // set the current ATR
-            adxq.atr_price = next_atr;
             update_adx_ema(idx, atr_data, dx, plus_di, minus_di, high, low, close);
             idx--;
         }
@@ -479,6 +554,12 @@ public:
         return latest_quote_dt;
     };
 
+    // Update the provided ADX data arrays from the most recently calculated extent
+    // to latest == 0
+    //
+    // This method uses a Quote Manager for access to chart high, low, and close quotes.
+    // This assumes that the Quote Manager was initialized for time-series data access
+    // with high, low, and close rate buffers.
     datetime update_adx_data(QuoteMgrOHLC &quote_mgr, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[])
     {
         // for data update within EAs
@@ -490,6 +571,90 @@ public:
             return EMPTY;
         }
         return update_adx_data(atr_data, dx, plus_di, minus_di, quote_mgr.high_buffer.data, quote_mgr.low_buffer.data, quote_mgr.close_buffer.data);
+    }
+};
+
+
+// Iterator for ADX indicator data, providing internal data storage
+class ADXBuffer : public ADXIter
+{
+public:
+    RateBuffer *atr_buffer;
+    RateBuffer *dx_buffer;
+    RateBuffer *plus_di_buffer;
+    RateBuffer *minus_di_buffer;
+
+    ADXBuffer(int period, int period_shift = 1, string _symbol = NULL, int _timeframe = EMPTY) : ADXIter(period, period_shift, _symbol, _timeframe)
+    {
+        atr_buffer = new RateBuffer();
+        dx_buffer = new RateBuffer();
+        plus_di_buffer = new RateBuffer();
+        minus_di_buffer = new RateBuffer();
+    };
+
+    ~ADXBuffer()
+    {
+        delete atr_buffer;
+        delete dx_buffer;
+        delete plus_di_buffer;
+        delete minus_di_buffer;
+    };
+
+    // increase the length of the indicator data buffers
+    bool setExtent(int extent)
+    {
+        if (!atr_buffer.setExtent(extent))
+            return false;
+        if (!dx_buffer.setExtent(extent))
+            return false;
+        if (!plus_di_buffer.setExtent(extent))
+            return false;
+        if (!minus_di_buffer.setExtent(extent))
+            return false;
+        return true;
+    }
+
+    // reduce the length of the indicator data buffers
+    bool reduceExtent(int extent)
+    {
+        if (!atr_buffer.reduceExtent(extent))
+            return false;
+        if (!dx_buffer.reduceExtent(extent))
+            return false;
+        if (!plus_di_buffer.reduceExtent(extent))
+            return false;
+        if (!minus_di_buffer.reduceExtent(extent))
+            return false;
+        return true;
+    }
+
+    // Initialize the indicator data buffers with high, low, close quotes via a time-series
+    // Quote Manager
+    datetime initialize_adx_data(QuoteMgrOHLC &quote_mgr, const int extent = EMPTY)
+    {
+        setExtent(extent == EMPTY ? iBars(symbol, timeframe) : extent);
+        return initialize_adx_data(quote_mgr, atr_buffer.data, dx_buffer.data, plus_di_buffer.data, minus_di_buffer.data, extent);
+    }
+
+    // Initialize the indicator data buffers from time-series high, low, and close quotes
+    datetime initialize_adx_data(const int extent, const double &high[], const double &low[], const double &close[])
+    {
+        setExtent(extent);
+        return initialize_adx_data(extent, atr_buffer.data, dx_buffer.data, plus_di_buffer.data, minus_di_buffer.data, high, low, close);
+    }
+
+    // Update the indicator data buffers with a time-series Quote Manager
+    datetime update_adx_data(QuoteMgrOHLC &quote_mgr)
+    {
+        setExtent(quote_mgr.extent);
+        return update_adx_data(quote_mgr, atr_buffer.data, dx_buffer.data, plus_di_buffer.data, minus_di_buffer.data);
+    }
+
+    // Update the indicator data buffers from time-series high, low, and close quotes
+    datetime update_adx_data(const double &high[], const double &low[], const double &close[], const int extent = EMPTY)
+    {
+        setExtent(extent == EMPTY ? ArraySize(high) : extent);
+        return update_adx_data(atr_buffer.data, dx_buffer.data, plus_di_buffer.data, minus_di_buffer.data, high, low, close);
     }
 };
 
