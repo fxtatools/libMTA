@@ -5,16 +5,18 @@
 //+------------------------------------------------------------------+
 #property strict
 
+
 #property indicator_buffers 3 // number of drawn buffers
-#property indicator_color1 clrGainsboro
+
+#property indicator_color1 clrYellow
 #property indicator_width1 1
 #property indicator_style1 STYLE_SOLID
 
-#property indicator_color2 clrYellow
+#property indicator_color2 clrOrange
 #property indicator_width2 1
 #property indicator_style2 STYLE_SOLID
 
-#property indicator_color3 clrOrange
+#property indicator_color3 clrDimGray
 #property indicator_width3 1
 #property indicator_style3 STYLE_SOLID
 
@@ -39,16 +41,16 @@ int OnInit()
   IndicatorShortName(StringFormat("%s(%d, %d)", shortname, iadx_period, iadx_period_shift));
   IndicatorDigits(Digits);
 
-  SetIndexBuffer(0, adx_buffer.dx_buffer.data);
-  SetIndexLabel(0, "DX");
+  SetIndexBuffer(0, adx_buffer.plus_di_buffer.data);
+  SetIndexLabel(0, "+DI");
   SetIndexStyle(0, DRAW_LINE);
 
-  SetIndexBuffer(1, adx_buffer.plus_di_buffer.data);
-  SetIndexLabel(1, "+DI");
+  SetIndexBuffer(1, adx_buffer.minus_di_buffer.data);
+  SetIndexLabel(1, "-DI");
   SetIndexStyle(1, DRAW_LINE);
-
-  SetIndexBuffer(2, adx_buffer.minus_di_buffer.data);
-  SetIndexLabel(2, "-DI");
+ 
+  SetIndexBuffer(2, adx_buffer.dx_buffer.data);
+  SetIndexLabel(2, "DX");
   SetIndexStyle(2, DRAW_LINE);
 
   SetIndexBuffer(3, adx_buffer.atr_buffer.data);
@@ -76,7 +78,7 @@ int OnCalculate(const int rates_total,
     }
   else
   {
-    adx_buffer.update_adx_data(high, low, close, rates_total);
+    adx_buffer.update_adx_data(high, low, close);
   }
   return rates_total;
 }

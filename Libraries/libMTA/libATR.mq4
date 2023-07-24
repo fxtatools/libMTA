@@ -12,14 +12,7 @@
 
 #include <libMQL4.mq4>
 
-class Chartable
-{
-public:
-    const string symbol;
-    const int timeframe;
-
-    Chartable(const string _symbol = NULL, const int _timeframe = EMPTY) : symbol(_symbol == NULL ? _Symbol : _symbol), timeframe(_timeframe == EMPTY ? _Period : _timeframe) {};
-};
+#include "chartable.mq4"
 
 /**
  * Iterator for Average True Range calculation
@@ -100,15 +93,16 @@ protected:
     const int ema_shifted_period;
     const double points_ratio;
 
-public:
+    ATRIter(string _symbol, int _timeframe) : ema_period(EMPTY), ema_shift(EMPTY), ema_shifted_period(EMPTY), points_ratio(NULL), latest_quote_dt(0), Chartable(_symbol, _timeframe){};
 
+public:
     int ema_period;
     int ema_shift;
     datetime latest_quote_dt;
 
-    ATRIter(int _ema_period, int _ema_shift = 1, string _symbol = NULL, int _timeframe = EMPTY) : ema_period(_ema_period), ema_shift(_ema_shift), ema_shifted_period(_ema_period - _ema_shift), points_ratio(_Point), latest_quote_dt(0), Chartable(_symbol, _timeframe){};
+    ATRIter(int _ema_period, int _ema_shift = 1, string _symbol = NULL, int _timeframe = EMPTY) : ema_period(_ema_period), ema_shift(_ema_shift), ema_shifted_period(_ema_period - _ema_shift), points_ratio(_symbol == NULL ? _Point : SymbolInfoDouble(_symbol, SYMBOL_POINT)), latest_quote_dt(0), Chartable(_symbol, _timeframe){};
 
-    ATRIter(int _ema_period, double _points_ratio, int _ema_shift = 1, string _symbol = NULL, int _timeframe = EMPTY) : ema_period(_ema_period), ema_shift(_ema_shift), ema_shifted_period(_ema_period - _ema_shift), points_ratio(_points_ratio), latest_quote_dt(0), Chartable(_symbol, _timeframe){};
+    ATRIter(int _ema_period, double _points_ratio, int _ema_shift = 1, string _symbol = NULL, int _timeframe = EMPTY) : ema_period(_ema_period), ema_shift(_ema_shift), ema_shifted_period(_ema_period - _ema_shift), points_ratio(_symbol == NULL ? _Point : SymbolInfoDouble(_symbol, SYMBOL_POINT)), latest_quote_dt(0), Chartable(_symbol, _timeframe){};
 
     const int latest_quote_offset()
     {
