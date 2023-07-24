@@ -35,20 +35,16 @@ int OnInit()
 
   /// TEST
   const int periods[] = {20, 15, 5}; // ctrl
-  // const int periods[] = {10, 5}; // alt ctrl (not useful)
   // const int periods[3] = {10, 5, 20}; // test unordered inputs
 
   const int shifts[] = {5, 3, 3}; // ctrl
-  // const int shifts[] = {3, 3}; // alt ctrl (not useful)
   // const int shifts[] = {3, 3, 5};
 
   const double weights[] = {0.15, 0.35, 0.50}; // ctrl
-  // const double weights[] = {0.2, 0.8}; // alt ctrl (not useful)
   // const double weights[] = {0.35, 0.4, 0.25};
 
   avg_buff = new ADXAvgBuffer(ArraySize(periods), periods, shifts, weights);
   printf("Initialized avg_buff with %d members, total weight %f, first period %d", avg_buff.n_adx_members, avg_buff.total_weights, avg_buff.longest_period);
-  // ADXIter* iter;
   
   ADXIter *iterators[];
   avg_buff.copy_iterators(iterators);
@@ -64,7 +60,6 @@ int OnInit()
 
   IndicatorBuffers(4);
 
-  // IndicatorShortName(StringFormat("%s(%d, %d)", shortname, iadx_period, iadx_period_shift));
   IndicatorShortName(StringFormat("%s(%d)", shortname, avg_buff.n_adx_members));
   IndicatorDigits(Digits);
 
@@ -101,15 +96,11 @@ int OnCalculate(const int rates_total,
 
   if (prev_calculated == 0)
   {
-    printf("Initial tick volume %lld", tick_volume[0]); // volume[0] DNW here
-
-    printf("initializing for %d quotes", rates_total); // not reached now?
+    printf("initializing for %d quotes", rates_total);
     avg_buff.initialize_adx_data(rates_total, high, low, close);
-    DEBUG("THUNK ? %s", avg_buff.thunk ? "Thunk" : "(It Thunked Not)");
     }
   else
   {
-    // reached first now? or has the journal gone nondeterministic in ordering of messages?
     DEBUG("Updating ... %d", rates_total - prev_calculated);
     avg_buff.update_adx_data(high, low, close, rates_total);
   }
