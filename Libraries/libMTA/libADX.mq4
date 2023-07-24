@@ -629,7 +629,6 @@ public:
     double total_weights;
     int longest_period;
 
-
     ADXAvgBuffer(const int n_members, const int &periods[], const int &period_shifts[], const double &weights[], const string _symbol = NULL, const int _timeframe = EMPTY) : n_adx_members(n_members), ADXBuffer(_symbol, _timeframe)
     {
 
@@ -695,6 +694,8 @@ public:
     };
 
     virtual int bind_initial_adx(int extent, const double &high[], const double &low[], const double &close[]) {
+        
+        DEBUG("Calculating Initial Avg ADX for %d", extent);
 
         int first_extent = -1;
         int next_extent;

@@ -23,6 +23,9 @@
 #property indicator_width3 1
 #property indicator_style3 STYLE_SOLID
 
+#property indicator_level1     25.0
+#property indicator_levelcolor clrDarkSlateGray
+
 #include <../Libraries/libMTA/libADX.mq4>
 
 ADXAvgBuffer* avg_buff;

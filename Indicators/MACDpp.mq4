@@ -36,10 +36,10 @@
 #include <../Libraries/libMTA/rates.mq4>
 #include <pricemode.mq4>
 
-extern const int macd_fast_ema = 12;
-extern const int macd_slow_ema = 26;
-extern const int macd_signal_ema = 9;
-extern const ENUM_PRICE_MODE macd_price_mode = PRICE_MODE_TYPICAL;
+extern const int macd_fast_ema = 12; // Fast EMA
+extern const int macd_slow_ema = 26; // Slow EMA
+extern const int macd_signal_ema = 9; // Signal EMA
+extern const ENUM_PRICE_MODE macd_price_mode = PRICE_MODE_TYPICAL; // Price Mode
 
 class MACDBuffer : public Chartable
 {
@@ -282,17 +282,12 @@ public:
     return start_idx;
   };
 
-  virtual datetime update_data(const double &open[], const double &high[], const double &low[], const double &close[], const int index = EMPTY)
+  virtual datetime update_data(const double &open[], const double &high[], const double &low[], const double &close[], const int _extent = EMPTY, const int index = EMPTY)
   {
     const int __latest__ = 0;
-    const int idx_initial = (index == EMPTY ? iBarShift(symbol, timeframe, latest_quote_dt) : index);
-    const int idx_prev = (index == EMPTY ? idx_initial + 1 : idx_initial);
-    if (index == EMPTY)
-    {
-      // this assumes that an empty index values indicates that the calculation
-      // is being resumed from some earlier, initialized data set, for data from
-      // the last time of calculation to current.
-      setExtent(idx_initial);
+    const int idx_initial =  index == EMPTY ? iBarShift(symbol, timeframe, latest_quote_dt) : index;
+    if(latest_quote_dt != 0) {
+      setExtent(_extent == EMPTY ? iBars(symbol, timeframe) : _extent);
       const int idx_plus = idx_initial + 1;
       const double fast_initial = macd_fast_ema_buffer.data[idx_plus];
       const double slow_initial = macd_slow_ema_buffer.data[idx_plus];
@@ -302,6 +297,7 @@ public:
       /// restore state for the internal data process
       macd_quote.bind_next(fast_initial, slow_initial, macd_initial, signal_initial);
     }
+
     /// starting at no earlier than tick 1, to ensure the previous indicator
     /// values are recalculated from final market quotes after the calculation
     /// index has advanced 0 => 1
@@ -342,9 +338,11 @@ public:
       return EMPTY;
     }
     DEBUG("Bind intial average in %d", extent);
-    const int calc_idx = bind_initial_signal(_extent - 1, open, high, low, close);
-    DEBUG("Initializing data [%d/%d]", calc_idx, _extent - 1);
-    return update_data(open, high, low, close, calc_idx);
+    latest_quote_dt = 0;
+    const int extent_minus = _extent - 1;
+    const int calc_idx = bind_initial_signal(extent_minus, open, high, low, close);
+    DEBUG("Initializing data [%d/%d]", calc_idx, extent_minus);
+    return update_data(open, high, low, close, _extent, calc_idx);
   };
 };
 
@@ -396,7 +394,7 @@ int OnCalculate(const int rates_total,
   else
   {
     DEBUG("Updating for index %d", rates_total - prev_calculated);
-    macd_buffer.update_data(open, high, low, close);
+    macd_buffer.update_data(open, high, low, close, rates_total);
   }
   return rates_total;
 }
