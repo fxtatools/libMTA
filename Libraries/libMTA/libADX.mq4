@@ -4,176 +4,7 @@
 
 #include "libATR.mq4"
 #include "rates.mq4"
-
-// Quote Manager constants
-#define QUOTE_TIME 1
-#define QUOTE_OPEN (1 << 1)
-#define QUOTE_HIGH (1 << 2)
-#define QUOTE_LOW (1 << 3)
-#define QUOTE_CLOSE (1 << 4)
-#define QUOTE_VOLUME (1 << 5) // cf. CopyTickVolume
-
-class QuoteMgrOHLC : public Chartable
-{
-
-public:
-    RateBuffer *open_buffer;
-    RateBuffer *high_buffer;
-    RateBuffer *low_buffer;
-    RateBuffer *close_buffer;
-    int extent;
-
-    ~QuoteMgrOHLC()
-    {
-        if (open_buffer != NULL)
-            delete open_buffer;
-        if (high_buffer != NULL)
-            delete high_buffer;
-        if (low_buffer != NULL)
-            delete low_buffer;
-        if (close_buffer != NULL)
-            delete close_buffer;
-    };
-
-    QuoteMgrOHLC(const int _extent, const int quote_kind, const bool as_series = true, const string _symbol = NULL, const int _timeframe = EMPTY) : extent(_extent), Chartable(_symbol, _timeframe)
-    {
-        if ((quote_kind & QUOTE_OPEN) != 0)
-        {
-            open_buffer = new RateBuffer(_extent);
-            if (open_buffer.extent == -1 || !open_buffer.setAsSeries(as_series))
-            {
-                open_buffer = NULL; // FIXME error
-            }
-        }
-        else
-            open_buffer = NULL;
-
-        if ((quote_kind & QUOTE_HIGH) != 0)
-        {
-            high_buffer = new RateBuffer(_extent);
-            if (high_buffer.extent == -1 || !high_buffer.setAsSeries(as_series))
-            {
-                high_buffer = NULL; // FIXME error
-            }
-        }
-        else
-            high_buffer = NULL;
-
-        if ((quote_kind & QUOTE_LOW) != 0)
-        {
-            low_buffer = new RateBuffer(_extent);
-            if (low_buffer.extent == -1 || !low_buffer.setAsSeries(as_series))
-            {
-                low_buffer = NULL; // FIXME error
-            }
-        }
-        else
-            low_buffer = NULL;
-
-        if ((quote_kind & QUOTE_CLOSE) != 0)
-        {
-            close_buffer = new RateBuffer(_extent);
-            if (close_buffer.extent == -1 || !close_buffer.setAsSeries(as_series))
-            {
-                close_buffer = NULL; // FIXME error
-            }
-        }
-        else
-            close_buffer = NULL;
-    };
-
-    bool setExtent(int _extent)
-    {
-        if (open_buffer != NULL)
-        {
-            if (!open_buffer.setExtent(_extent))
-                return false;
-        }
-        if (high_buffer != NULL)
-        {
-            if (!high_buffer.setExtent(_extent))
-                return false;
-        }
-        if (low_buffer != NULL)
-        {
-            if (!low_buffer.setExtent(_extent))
-                return false;
-        }
-        if (close_buffer != NULL)
-        {
-            if (!close_buffer.setExtent(_extent))
-                return false;
-        }
-        extent = _extent;
-        return true;
-    };
-
-    bool reduceExtent(int len)
-    {
-        if (open_buffer != NULL)
-        {
-            if (!open_buffer.reduceExtent(len))
-                return false;
-        }
-        if (high_buffer != NULL)
-        {
-            if (!high_buffer.reduceExtent(len))
-                return false;
-        }
-        if (low_buffer != NULL)
-        {
-            if (!low_buffer.reduceExtent(len))
-                return false;
-        }
-        if (close_buffer != NULL)
-        {
-            if (!close_buffer.reduceExtent(len))
-                return false;
-        }
-        extent = len;
-        return true;
-    }
-
-    // copy rates to the provided extent for this Quote Manager, for any initialized
-    // open, high, low, and close buffers
-    bool copyRates(const int _extent)
-    {
-        if (!setExtent(_extent))
-            return false;
-        if (open_buffer != NULL)
-        {
-            int rslt = CopyOpen(symbol, timeframe, 0, _extent, open_buffer.data);
-            if (rslt == -1)
-                return false;
-        }
-        if (high_buffer != NULL)
-        {
-            int rslt = CopyHigh(symbol, timeframe, 0, _extent, high_buffer.data);
-            if (rslt == -1)
-                return false;
-        }
-        if (low_buffer != NULL)
-        {
-            int rslt = CopyLow(symbol, timeframe, 0, _extent, low_buffer.data);
-            if (rslt == -1)
-                return false;
-        }
-        if (close_buffer != NULL)
-        {
-            int rslt = CopyClose(symbol, timeframe, 0, _extent, close_buffer.data);
-            if (rslt == -1)
-                return false;
-        }
-        return true;
-    };
-};
-
-class QuoteMgrHLC : public QuoteMgrOHLC
-{
-    // FIXME move to :Include/libEA/rates.mq4
-public:
-    QuoteMgrHLC(const int _extent, const string _symbol = NULL, const int _timeframe = EMPTY) : QuoteMgrOHLC(_extent, QUOTE_HIGH | QUOTE_LOW | QUOTE_CLOSE, true, _symbol, _timeframe){};
-};
+#include "quotes.mq4"
 
 class ADXIter : public ATRIter
 {
@@ -190,8 +21,9 @@ protected:
     };
     ADXQuote *adxq;
 
-    ADXIter(string _symbol, int _timeframe): ATRIter(_symbol, _timeframe) {
-        adxq = new ADXQuote(); // TBD for ADXAvgBuffer
+    ADXIter(string _symbol, int _timeframe) : ATRIter(_symbol, _timeframe)
+    {
+        adxq = new ADXQuote(); // for ADXAvgBuffer
     }
 
 public:
@@ -210,23 +42,27 @@ public:
         delete adxq;
     };
 
-    double bound_atr_price() {
+    double bound_atr_price()
+    {
         // external adxq 'out' accessor for iterators
         return adxq.atr_price;
     }
 
-    double bound_dx() {
+    double bound_dx()
+    {
         return adxq.dx;
     }
-    
-    double bound_plus_di() {
+
+    double bound_plus_di()
+    {
         return adxq.plus_di;
     }
-    
-    double bound_minus_di() {
+
+    double bound_minus_di()
+    {
         return adxq.minus_di;
     }
-    
+
     // Initlaize the ADXQuote adxq for the previous ATR and previous DX at an arbitrary
     // data index
     void prepare_next_pass(const double atr_price, const double dx)
@@ -300,25 +136,37 @@ public:
             const double mov_plus = plus_dm_movement(offset, high, low);
             const double mov_minus = minus_dm_movement(offset, high, low);
 
-            if(mov_plus > 0 && mov_plus > mov_minus) {
+            if (mov_plus > 0 && mov_plus > mov_minus)
+            {
                 sm_plus_dm += mov_plus;
-            } else if(mov_minus > 0 && mov_minus > mov_plus) {
+            }
+            else if (mov_minus > 0 && mov_minus > mov_plus)
+            {
                 sm_minus_dm += mov_minus;
             }
         }
 
-        //// ^ results in very large values for +DI/-DI
-        /// or ...
+        //// Wilder, cf. p. 48
+        //// Pruitt, G. (2016). Stochastics and Averages and RSI! Oh, My.
+        ////   In The Ultimate Algorithmic Trading System Toolbox + Website (pp. 25–76).
+        ////   John Wiley & Sons, Inc. https://doi.org/10.1002/9781119262992.ch2
+        ////
+        //// also https://www.investopedia.com/terms/a/adx.asp
+        ////
         // sm_plus_dm = sm_plus_dm - (sm_plus_dm / ema_period) + plus_dm;
         // sm_minus_dm = sm_minus_dm - (sm_minus_dm / ema_period) + minus_dm;
+        //// EMA
         sm_plus_dm /= ema_period;
         sm_minus_dm /= ema_period;
-        /// FIXME sometimes may result in +DI / -DI greater than 100
 
+        //// conventional plus_di / minus_di
         // const double plus_di = (sm_plus_dm / atr_cur) * 100;
         // const double minus_di = (sm_minus_dm / atr_cur)  * 100;
-        const double plus_di = 100 - (100 / (1 + (sm_plus_dm / atr_cur)));
-        const double minus_di = 100 - (100 / (1 + (sm_minus_dm / atr_cur)));
+        //
+        //// not used anywhere in reference for common ADX +DI/-DI calculation,
+        //// this reliably converts it to a percentage however.
+        const double plus_di = 100.0 - (100.0 / (1.0 + (sm_plus_dm / atr_cur)));
+        const double minus_di = 100.0 - (100.0 / (1.0 + (sm_minus_dm / atr_cur)));
 
         if (plus_di == 0 && minus_di == 0)
         {
@@ -361,7 +209,7 @@ public:
         if (next_atr == 0)
         {
             Alert(StringFormat("%s %d (%d, %d): Initial ATR calculation failed => 0",
-                    symbol, timeframe, ema_period, ema_shift));
+                               symbol, timeframe, ema_period, ema_shift));
             return EMPTY;
         }
         // atr_data[extent] = next_atr;
@@ -407,7 +255,7 @@ public:
         /// binding current to adxq
         bind_adx_quote(idx, high, low, close);
         /// binding DX EMA to adxq
-        adxq.dx = ((dx * ema_shifted_period) + (adxq.dx * ema_shift)) / ema_period;
+        adxq.dx = ((dx * (double)ema_shifted_period) + (adxq.dx * (double)ema_shift)) / (double)ema_period;
     };
 
     // Set current +DI, -DI, and DX EMA at index idx, for that index within the provided
@@ -527,14 +375,16 @@ class ADXBuffer : public ADXIter
 {
 
 protected:
-    void init_buffers() {
+    void init_buffers()
+    {
         atr_buffer = new RateBuffer();
         dx_buffer = new RateBuffer();
         plus_di_buffer = new RateBuffer();
         minus_di_buffer = new RateBuffer();
     }
 
-    ADXBuffer(string _symbol, int _timeframe): ADXIter(_symbol, _timeframe) {
+    ADXBuffer(string _symbol, int _timeframe) : ADXIter(_symbol, _timeframe)
+    {
         init_buffers();
     }
 
@@ -608,13 +458,12 @@ public:
     };
 
     // Update the indicator data buffers from time-series high, low, and close quotes
-   virtual datetime update_adx_data(const double &high[], const double &low[], const double &close[], const int extent = EMPTY)
+    virtual datetime update_adx_data(const double &high[], const double &low[], const double &close[], const int extent = EMPTY)
     {
         setExtent(extent == EMPTY ? ArraySize(high) : extent);
         return update_adx_data(atr_buffer.data, dx_buffer.data, plus_di_buffer.data, minus_di_buffer.data, high, low, close);
     };
 };
-
 
 class ADXAvgBuffer : public ADXBuffer
 {
@@ -637,23 +486,29 @@ public:
         int add_idx;
         int last_per = 0;
         int longest_per = 0;
-        for (int idx = 0; idx < n_members; idx++) {
+        for (int idx = 0; idx < n_members; idx++)
+        {
             const int per = periods[idx];
             const int shift = period_shifts[idx];
             const double weight = weights[idx];
             total_weights += weight;
-            if (per > last_per) {
-                for(int n = idx; n> 0; n--) {
+            if (per > last_per)
+            {
+                for (int n = idx; n > 0; n--)
+                {
                     // shift all iterators & weights forward by one
                     const int nminus = n - 1;
                     m_iter[n] = m_iter[nminus];
                     m_weights[n] = m_weights[nminus];
                 }
                 add_idx = 0;
-                if(per > longest_per) {
+                if (per > longest_per)
+                {
                     longest_per = per;
                 }
-            } else {
+            }
+            else
+            {
                 add_idx = idx;
             }
             m_iter[add_idx] = new ADXIter(per, shift, _symbol, _timeframe);
@@ -664,7 +519,8 @@ public:
     }
     ~ADXAvgBuffer()
     {
-        for(int n = 0; n < n_adx_members; n++) {
+        for (int n = 0; n < n_adx_members; n++)
+        {
             ADXIter *it = m_iter[n];
             m_iter[n] = NULL;
             delete it;
@@ -674,27 +530,33 @@ public:
     }
 
     // copy elements of the m_iter array to some provided buffer
-    int copy_iterators(ADXIter *&buffer[]) {
-        if(ArrayIsDynamic(buffer) && ArraySize(buffer) < n_adx_members) 
+    int copy_iterators(ADXIter *&buffer[])
+    {
+        if (ArrayIsDynamic(buffer) && ArraySize(buffer) < n_adx_members)
             ArrayResize(buffer, n_adx_members);
-        for(int n = 0; n < n_adx_members; n++) {
+        for (int n = 0; n < n_adx_members; n++)
+        {
             buffer[n] = m_iter[n];
         }
         return n_adx_members;
     };
 
     // copy elements of the m_weights array to some provided buffer
-    int copy_weights(double &buffer[]) {
-        if(ArrayIsDynamic(buffer) && ArraySize(buffer) < n_adx_members) 
+    int copy_weights(double &buffer[])
+    {
+        if (ArrayIsDynamic(buffer) && ArraySize(buffer) < n_adx_members)
             ArrayResize(buffer, n_adx_members);
-        for(int n = 0; n < n_adx_members; n++) {
+        for (int n = 0; n < n_adx_members; n++)
+        {
             buffer[n] = m_weights[n];
         }
         return n_adx_members;
     };
 
-    virtual int bind_initial_adx(int extent, const double &high[], const double &low[], const double &close[]) {
         
+    virtual int bind_initial_adx(int extent, const double &high[], const double &low[], const double &close[])
+    {
+
         DEBUG("Calculating Initial Avg ADX for %d", extent);
 
         int first_extent = -1;
@@ -703,22 +565,27 @@ public:
         double avg_dx = __dblzero__;
         double avg_plus_di = __dblzero__;
         double avg_minus_di = __dblzero__;
-        for(int n = 0; n < n_adx_members; n++) {
+        for (int n = 0; n < n_adx_members; n++)
+        {
             ADXIter *it = m_iter[n];
             double weight = m_weights[n];
-            if(first_extent == -1) {
+            if (first_extent == -1)
+            {
                 first_extent = it.bind_initial_adx(extent, high, low, close);
-            } else {
+            }
+            else
+            {
                 next_extent = it.bind_initial_adx(extent, high, low, close);
-                for(int idx = next_extent; idx <= first_extent; idx++) {
+                for (int idx = next_extent; idx <= first_extent; idx++)
+                {
                     // fast-forward to the start for the ADX with longest period
                     it.bind_adx_ema(idx, high, low, close);
                 }
             }
-            avg_atr+=(it.bound_atr_price() * weight);
-            avg_dx+=(it.bound_dx() * weight);
-            avg_plus_di+=(it.bound_plus_di() * weight);
-            avg_minus_di+=(it.bound_minus_di() * weight);
+            avg_atr += (it.bound_atr_price() * weight);
+            avg_dx += (it.bound_dx() * weight);
+            avg_plus_di += (it.bound_plus_di() * weight);
+            avg_minus_di += (it.bound_minus_di() * weight);
         }
         avg_atr /= total_weights;
         avg_dx /= total_weights;
@@ -731,20 +598,22 @@ public:
         return first_extent;
     }
 
-    virtual void bind_adx_ema(const int idx, const double &high[], const double &low[], const double &close[]) {
-        DEBUG("Binding Avg ADX EMA %d", idx); 
+    virtual void bind_adx_ema(const int idx, const double &high[], const double &low[], const double &close[])
+    {
+        DEBUG("Binding Avg ADX EMA %d", idx);
         double avg_atr = __dblzero__;
         double avg_dx = __dblzero__;
         double avg_plus_di = __dblzero__;
         double avg_minus_di = __dblzero__;
-        for(int n = 0; n < n_adx_members; n++) {
+        for (int n = 0; n < n_adx_members; n++)
+        {
             ADXIter *it = m_iter[n];
             double weight = m_weights[n];
             it.bind_adx_ema(idx, high, low, close);
-            avg_atr+=(it.bound_atr_price() * weight);
-            avg_dx+=(it.bound_dx() * weight);
-            avg_plus_di+=(it.bound_plus_di() * weight);
-            avg_minus_di+=(it.bound_minus_di() * weight);
+            avg_atr += (it.bound_atr_price() * weight);
+            avg_dx += (it.bound_dx() * weight);
+            avg_plus_di += (it.bound_plus_di() * weight);
+            avg_minus_di += (it.bound_minus_di() * weight);
         }
         avg_atr /= total_weights;
         avg_dx /= total_weights;
