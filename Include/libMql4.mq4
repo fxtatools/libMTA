@@ -59,3 +59,17 @@ bool rates_quote(const int offset, const ENUM_TIMEFRAMES timeframe, double &buff
     return true;
 }
 
+
+// FIXME redefined in adxcommon
+bool dblEql(const double d1, const double d2) {
+    // for high-precision comparison with float values, see also
+    // https://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/
+    //// symbol-dependent
+    // return NormalizeDouble(fabs(d2 - d1), Digits) == 0;
+    //// symbol-independent
+    return fabs(d2 - d1) <= DBL_EPSILON;
+}
+
+bool dblZero(const double d) {
+    return dblEql(d, DBLZERO);
+}

@@ -25,37 +25,44 @@
 
 extern const int iadx_period = 10; // EMA Period
 extern const int iadx_period_shift = 3; // Forward Shift for EMA Period
+extern const ENUM_APPLIED_PRICE iadx_price_mode = PRICE_TYPICAL; // ATR Applied Price
+
+// libATR supports using e.g by Typical Price when calculating ATR, 
+// rather than the conventional close price
 
 #include <../Libraries/libMTA/libADX.mq4>
 
-ADXBuffer* adx_buffer;
+ADXIter* adx_buffer;
 
 int OnInit()
 {
   string shortname = "ADX++";
 
-  adx_buffer = new ADXBuffer(iadx_period, iadx_period_shift, _Symbol, _Period);
+  adx_buffer = new ADXIter(iadx_period, iadx_period_shift, iadx_price_mode, _Symbol, _Period);
 
   IndicatorBuffers(4);
 
   IndicatorShortName(StringFormat("%s(%d, %d)", shortname, iadx_period, iadx_period_shift));
   IndicatorDigits(Digits);
 
-  SetIndexBuffer(0, adx_buffer.plus_di_buffer.data);
+  SetIndexBuffer(0, adx_buffer.plus_di_buffer().data);
   SetIndexLabel(0, "+DI");
   SetIndexStyle(0, DRAW_LINE);
 
-  SetIndexBuffer(1, adx_buffer.minus_di_buffer.data);
+  SetIndexBuffer(1, adx_buffer.minus_di_buffer().data);
   SetIndexLabel(1, "-DI");
   SetIndexStyle(1, DRAW_LINE);
  
-  SetIndexBuffer(2, adx_buffer.dx_buffer.data);
+  SetIndexBuffer(2, adx_buffer.dx_buffer().data);
   SetIndexLabel(2, "DX");
   SetIndexStyle(2, DRAW_LINE);
 
-  SetIndexBuffer(3, adx_buffer.atr_buffer.data);
+  SetIndexBuffer(3, adx_buffer.atr_buffer().data);
   SetIndexLabel(3, NULL);
   SetIndexStyle(3, DRAW_NONE);
+  // SetIndexLabel(3, "ADX ATR");
+  // SetIndexStyle(3, DRAW_LINE); // TBD
+  
 
   return INIT_SUCCEEDED;
 }
@@ -74,11 +81,11 @@ int OnCalculate(const int rates_total,
   if (prev_calculated == 0)
   {
     DEBUG("initializing for %d quotes", rates_total);
-    adx_buffer.initialize_adx_data(rates_total, high, low, close);
+    adx_buffer.initialize_adx_data(rates_total, open, high, low, close, 0);
     }
   else
   {
-    adx_buffer.update_adx_data(high, low, close);
+    adx_buffer.update_adx_data(open, high, low, close, rates_total, 0);
   }
   return rates_total;
 }

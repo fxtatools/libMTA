@@ -22,6 +22,19 @@
 #include <stdio.h>
 
 /**
+ * MQL4 Pointers
+ **/
+
+
+enum ENUM_POINTER_TYPE {
+    POINTER_INVALID,
+    POINTER_DYNAMIC,
+    POINTER_AUTOMATIC
+};
+
+ENUM_POINTER_TYPE CheckPointer(void* ptr) {};
+
+/**
  * String Functions (FIXME)
  **/
 
@@ -1349,9 +1362,9 @@ enum _DEINIT_REASON
 #define PLOT_SHIFT 0
 #define PLOT_SHOW_DATA 0
 #define PLUSDI_LINE 0
-#define POINTER_AUTOMATIC 0
-#define POINTER_DYNAMIC 0
-#define POINTER_INVALID 0
+// #define POINTER_AUTOMATIC 0
+// #define POINTER_DYNAMIC 0
+// #define POINTER_INVALID 0
 #define POSITION_COMMENT 0
 #define POSITION_COMMISSION 0
 #define POSITION_IDENTIFIER 0
@@ -1765,7 +1778,7 @@ enum _DEINIT_REASON
 #define ChartXOnDropped() 0
 #define ChartXYToTimePrice() 0
 #define ChartYOnDropped() 0
-#define CheckPointer() 0
+// #define CheckPointer() 0
 #define CLBufferCreate() 0
 #define CLBufferFree() 0
 #define CLBufferRead() 0

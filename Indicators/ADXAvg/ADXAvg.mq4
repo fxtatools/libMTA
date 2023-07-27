@@ -66,19 +66,19 @@ int OnInit()
   IndicatorShortName(StringFormat("%s(%d)", shortname, avg_buff.n_adx_members));
   IndicatorDigits(Digits);
 
-  SetIndexBuffer(0, avg_buff.dx_buffer.data);
+  SetIndexBuffer(0, avg_buff.dx_buffer().data);
   SetIndexLabel(0, "DX");
   SetIndexStyle(0, DRAW_LINE);
 
-  SetIndexBuffer(1, avg_buff.plus_di_buffer.data);
+  SetIndexBuffer(1, avg_buff.plus_di_buffer().data);
   SetIndexLabel(1, "+DI");
   SetIndexStyle(1, DRAW_LINE);
 
-  SetIndexBuffer(2, avg_buff.minus_di_buffer.data);
+  SetIndexBuffer(2, avg_buff.minus_di_buffer().data);
   SetIndexLabel(2, "-DI");
   SetIndexStyle(2, DRAW_LINE);
 
-  SetIndexBuffer(3, avg_buff.atr_buffer.data);
+  SetIndexBuffer(3, avg_buff.atr_buffer().data);
   SetIndexLabel(3, NULL);
   SetIndexStyle(3, DRAW_NONE);
 
@@ -100,12 +100,12 @@ int OnCalculate(const int rates_total,
   if (prev_calculated == 0)
   {
     printf("initializing for %d quotes", rates_total);
-    avg_buff.initialize_adx_data(rates_total, high, low, close);
+    avg_buff.initialize_adx_data(rates_total, open, high, low, close, 0);
     }
   else
   {
     DEBUG("Updating ... %d", rates_total - prev_calculated);
-    avg_buff.update_adx_data(high, low, close, rates_total);
+    avg_buff.update_adx_data(open, high, low, close, rates_total, 0);
   }
   return rates_total;
 }

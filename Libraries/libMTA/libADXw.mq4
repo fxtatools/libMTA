@@ -2,6 +2,9 @@
 #ifndef _LIBADXW_MQ4
 #define _LIBADXW_MQ4 1
 
+
+#property library
+
 #include "libADX.mq4"
 
 class ADXwIter : public ADXIter
@@ -10,7 +13,7 @@ protected:
     ADXwIter(string _symbol, int _timeframe) : ADXIter(_symbol, _timeframe){};
 
 public:
-    ADXwIter(int period, int period_shift = 1, string _symbol = NULL, int _timeframe = EMPTY) : ADXIter(period, period_shift, _symbol, _timeframe){};
+    ADXwIter(int period, int period_shift = 1, const int _price_mode = PRICE_CLOSE, string _symbol = NULL, int _timeframe = EMPTY) : ADXIter(period, period_shift, _price_mode, _symbol, _timeframe){};
 
     // calculate the non-EMA ADX DX, +DI and -DI at a provided index, using time-series
     // high, low, and close data
@@ -115,101 +118,6 @@ public:
         {
             adxq.dx = fabs((plus_di - minus_di) / di_sum) * (double)100;
         }
-    };
-};
-
-// Iterator for ADXw indicator data, providing internal data storage
-class ADXwBuffer : public ADXwIter
-{
-
-protected:
-    void init_buffers()
-    {
-        atr_buffer = new RateBuffer();
-        dx_buffer = new RateBuffer();
-        plus_di_buffer = new RateBuffer();
-        minus_di_buffer = new RateBuffer();
-    }
-
-    ADXwBuffer(string _symbol, int _timeframe) : ADXwIter(_symbol, _timeframe)
-    {
-        init_buffers();
-    }
-
-public:
-    RateBuffer *atr_buffer;
-    RateBuffer *dx_buffer;
-    RateBuffer *plus_di_buffer;
-    RateBuffer *minus_di_buffer;
-
-    ADXwBuffer(int period, int period_shift = 1, string _symbol = NULL, int _timeframe = EMPTY) : ADXwIter(period, period_shift, _symbol, _timeframe)
-    {
-        init_buffers();
-    };
-
-    ~ADXwBuffer()
-    {
-        delete atr_buffer;
-        delete dx_buffer;
-        delete plus_di_buffer;
-        delete minus_di_buffer;
-    };
-
-    // increase the length of the indicator data buffers
-    bool setExtent(int extent)
-    {
-        if (!atr_buffer.setExtent(extent))
-            return false;
-        if (!dx_buffer.setExtent(extent))
-            return false;
-        if (!plus_di_buffer.setExtent(extent))
-            return false;
-        if (!minus_di_buffer.setExtent(extent))
-            return false;
-        return true;
-    };
-
-    // reduce the length of the indicator data buffers
-    bool reduceExtent(int extent)
-    {
-        if (!atr_buffer.reduceExtent(extent))
-            return false;
-        if (!dx_buffer.reduceExtent(extent))
-            return false;
-        if (!plus_di_buffer.reduceExtent(extent))
-            return false;
-        if (!minus_di_buffer.reduceExtent(extent))
-            return false;
-        return true;
-    };
-
-    // Initialize the indicator data buffers with high, low, close quotes via a time-series
-    // Quote Manager
-    virtual datetime initialize_adx_data(QuoteMgrOHLC &quote_mgr, const int extent = EMPTY)
-    {
-        setExtent(extent == EMPTY ? iBars(symbol, timeframe) : extent);
-        return initialize_adx_data(quote_mgr, atr_buffer.data, dx_buffer.data, plus_di_buffer.data, minus_di_buffer.data, extent);
-    };
-
-    // Initialize the indicator data buffers from time-series high, low, and close quotes
-    virtual datetime initialize_adx_data(const int extent, const double &high[], const double &low[], const double &close[])
-    {
-        setExtent(extent);
-        return initialize_adx_data(extent, atr_buffer.data, dx_buffer.data, plus_di_buffer.data, minus_di_buffer.data, high, low, close);
-    };
-
-    // Update the indicator data buffers with a time-series Quote Manager
-    virtual datetime update_adx_data(QuoteMgrOHLC &quote_mgr)
-    {
-        setExtent(quote_mgr.extent);
-        return update_adx_data(quote_mgr, atr_buffer.data, dx_buffer.data, plus_di_buffer.data, minus_di_buffer.data);
-    };
-
-    // Update the indicator data buffers from time-series high, low, and close quotes
-    virtual datetime update_adx_data(const double &high[], const double &low[], const double &close[], const int extent = EMPTY)
-    {
-        setExtent(extent == EMPTY ? ArraySize(high) : extent);
-        return update_adx_data(atr_buffer.data, dx_buffer.data, plus_di_buffer.data, minus_di_buffer.data, high, low, close);
     };
 };
 

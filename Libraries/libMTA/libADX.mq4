@@ -15,15 +15,61 @@ protected:
     public:
         double atr_price; // generally used as an input value, current ATR
         double dx;        // output value for non-EMA DX, input and output value for EMA DX
-        double plus_di;   // output value
-        double minus_di;  // output value
-        ADXQuote() : atr_price(-0.0), dx(-0.0), plus_di(-0.0), minus_di(-0.0){};
+        double plus_dm;   // internal state for +DM averaging (Wilder)
+        double minus_dm;  // internal state for -DM averaging (Wilder)
+        double plus_di;   // output value, indicator data
+        double minus_di;  // output value, indicator data
+        ADXQuote() : atr_price(-0.0), dx(-0.0), plus_dm(-0.0), minus_dm(-0.0), plus_di(-0.0), minus_di(-0.0){};
     };
     ADXQuote *adxq;
 
+    class ADXBufferMgr : public ATRBufferMgr
+    {
+    public:
+        // RateBuffer *atr_buffer; // similarly first_buffer, defined in base class
+        RateBuffer *dx_buffer;
+        RateBuffer *plus_dm_buffer;
+        RateBuffer *minus_dm_buffer;
+        RateBuffer *plus_di_buffer;
+        RateBuffer *minus_di_buffer;
+
+        ADXBufferMgr(const int extent = 0)  : ATRBufferMgr(extent)
+        {
+            
+            // initialize local rate buffers,
+            // storing a reference to each
+            dx_buffer = new RateBuffer(extent, true, 4);
+            // set pointers to locally created buffers
+            plus_dm_buffer = dx_buffer.next();
+            minus_dm_buffer = plus_dm_buffer.next();
+            plus_di_buffer = minus_dm_buffer.next();
+            minus_di_buffer = plus_di_buffer.next();
+            RateBuffer *base_last = this.last_buffer();
+            if (base_last == NULL) 
+                printf("ADXBufferMgr failed to link to ATR buffers");
+            else
+                base_last.setNext(dx_buffer);            
+        };
+
+        ~ADXBufferMgr() 
+        {   // base class destructor will delete all linked buffers
+            //
+            // clear references to local linked buffers            
+            dx_buffer = NULL;
+            plus_dm_buffer = NULL;
+            minus_dm_buffer = NULL;
+            plus_di_buffer = NULL;
+            minus_di_buffer = NULL;
+            dx_buffer = NULL;
+        }
+
+    };
+    ADXBufferMgr *adx_buffer_mgr;
+
     ADXIter(string _symbol, int _timeframe) : ATRIter(_symbol, _timeframe)
     {
-        adxq = new ADXQuote(); // for ADXAvgBuffer
+        adxq = new ADXQuote();
+        adx_buffer_mgr = new ADXBufferMgr(0);
     }
 
 public:
@@ -32,14 +78,24 @@ public:
     // - higher period shift => indicator will generally be more responsive
     //   to present market characteristics, even in event of a market rate spike
     // - period_shift should always be provided as < period
-    ADXIter(int period, int period_shift = 1, string _symbol = NULL, int _timeframe = EMPTY) : ATRIter(period, period_shift, _symbol, _timeframe)
+    ADXIter(int period, int period_shift = 1, const int _price_mode = PRICE_CLOSE, string _symbol = NULL, int _timeframe = EMPTY) : ATRIter(period, period_shift, _price_mode, _symbol, _timeframe)
     {
         adxq = new ADXQuote();
+        adx_buffer_mgr = new ADXBufferMgr(0);
     };
 
     ~ADXIter()
     {
-        delete adxq;
+        FREEPTR(adxq);
+        FREEPTR(adx_buffer_mgr);
+    };
+
+    bool setExtent(const int extent, const int padding = EMPTY) {
+        return adx_buffer_mgr.setExtent(extent, padding);
+    };
+
+    bool reduceExtent(const int extent, const int padding = EMPTY) {
+        return adx_buffer_mgr.reduceExtent(extent, padding);
     };
 
     double bound_atr_price()
@@ -53,6 +109,16 @@ public:
         return adxq.dx;
     }
 
+    double bound_plus_dm()
+    {
+        return adxq.plus_dm;
+    }
+
+    double bound_minus_dm()
+    {
+        return adxq.minus_dm;
+    }
+
     double bound_plus_di()
     {
         return adxq.plus_di;
@@ -63,9 +129,16 @@ public:
         return adxq.minus_di;
     }
 
+    RateBuffer *atr_buffer() { return adx_buffer_mgr.atr_buffer; };
+    RateBuffer *dx_buffer() { return adx_buffer_mgr.dx_buffer; };
+    RateBuffer *plus_dm_buffer() { return adx_buffer_mgr.plus_dm_buffer; };
+    RateBuffer *minus_dm_buffer() { return adx_buffer_mgr.minus_dm_buffer; };
+    RateBuffer *plus_di_buffer() { return adx_buffer_mgr.plus_di_buffer; };
+    RateBuffer *minus_di_buffer() { return adx_buffer_mgr.minus_di_buffer; };
+
     // Initlaize the ADXQuote adxq for the previous ATR and previous DX at an arbitrary
     // data index
-    void prepare_next_pass(const double atr_price, const double dx)
+    void prepare_next_pass(const double atr_price, const double dx, const double plus_dm, const double minus_dm)
     {
         // set the current ATR and previous DX
         //
@@ -75,6 +148,8 @@ public:
         // internally, after the initial previous-quote seed data.
         adxq.atr_price = atr_price;
         adxq.dx = dx;
+        adxq.plus_dm = plus_dm;
+        adxq.minus_dm = minus_dm;
     };
 
     // Calculate the +DI directional movement at a given index, using the time-series
@@ -102,7 +177,7 @@ public:
     // externally
     //
     // Fields of adxq will be initialized for ATR, DX, +DI and -DI values, without DX EMA
-    virtual void bind_adx_quote(const int idx, const double &high[], const double &low[], const double &close[])
+    virtual void bind_adx_quote(const int idx, const double &open[], const double &high[], const double &low[], const double &close[])
     {
         // Implementation Notes:
         //
@@ -117,9 +192,13 @@ public:
 
         double atr_cur = adxq.atr_price;
 
+        const double ema_period_dbl = (double) ema_period;
+        double plus_dm_wt = __dblzero__;
+        double minus_dm_wt = __dblzero__;
+
         DEBUG("(%d, %d) ATR at bind_adx_quote [%d] %s : %f", ema_period, ema_shift, idx, offset_time_str(idx), atr_cur);
 
-        if (atr_cur == 0)
+        if (dblZero(atr_cur))
         {
             printf("zero initial ATR [%d] %s", idx, offset_time_str(idx));
         }
@@ -128,23 +207,40 @@ public:
             printf("negative ATR [%d] %s", idx, offset_time_str(idx));
         }
 
-        // https://en.wikipedia.org/wiki/Average_directional_movement_index
-        //
-        // this implementation does not provide additional smoothing of the EMA
-        for (int offset = idx + ema_period; offset >= idx; offset--)
+        for (int offset = idx + ema_period, p_k = 1; offset >= idx; offset--, p_k++)
         {
             const double mov_plus = plus_dm_movement(offset, high, low);
             const double mov_minus = minus_dm_movement(offset, high, low);
+            const double wfactor = (double)p_k / ema_period_dbl; // mWMA
 
             if (mov_plus > 0 && mov_plus > mov_minus)
             {
-                sm_plus_dm += mov_plus;
+                // sm_plus_dm += mov_plus;
+                // plus_dm_wt += 1.0;
+                sm_plus_dm += (mov_plus * wfactor); // mWMA
+                // plus_dm_wt += wfactor;
             }
             else if (mov_minus > 0 && mov_minus > mov_plus)
             {
-                sm_minus_dm += mov_minus;
+                // sm_minus_dm += mov_minus;
+                // minus_dm_wt += 1.0;
+                sm_minus_dm += (mov_minus * wfactor); /// mWMA
+                // minus_dm_wt += wfactor;
             }
+            // plus_dm_wt += 1.0;
+            // minus_dm_wt += 1.0;
+            plus_dm_wt += wfactor;
+            minus_dm_wt += wfactor;
         }
+
+        /// mWMA - TBD
+        if (!dblZero(plus_dm_wt))
+            sm_plus_dm /= plus_dm_wt;
+        if (!dblZero(minus_dm_wt))
+            sm_minus_dm /= minus_dm_wt;
+
+        const double plus_dm_prev = adxq.plus_dm;
+        const double minus_dm_prev = adxq.minus_dm;
 
         //// Wilder, cf. p. 48
         //// Pruitt, G. (2016). Stochastics and Averages and RSI! Oh, My.
@@ -153,42 +249,60 @@ public:
         ////
         //// also https://www.investopedia.com/terms/a/adx.asp
         ////
-        // sm_plus_dm = sm_plus_dm - (sm_plus_dm / ema_period) + plus_dm;
-        // sm_minus_dm = sm_minus_dm - (sm_minus_dm / ema_period) + minus_dm;
-        //// EMA
-        sm_plus_dm /= ema_period;
-        sm_minus_dm /= ema_period;
+        /* */
+        /*
+        
+        if (plus_dm_prev != DBL_MIN)
+            sm_plus_dm = plus_dm_prev - (plus_dm_prev / (double) ema_period) + sm_plus_dm;
+        if (minus_dm_prev != DBL_MIN)
+            sm_minus_dm = minus_dm_prev - (minus_dm_prev / (double) ema_period) + sm_minus_dm;
+       adxq.plus_dm = sm_plus_dm;
+       adxq.minus_dm = sm_minus_dm;
+        */
+        /* */
 
+        /// alternately: DM for DI as forward-shifted EMA of the current weighted MA of +DM / -DM
+        /* */
+        const double ema_shifted_dbl = (double) ema_shifted_period;
+        const double ema_shift_dbl = (double) ema_shift;
+        if(plus_dm_prev != DBL_MIN)
+            sm_plus_dm = ((plus_dm_prev * ema_shifted_dbl) + (sm_plus_dm * ema_shift_dbl)) / ema_period_dbl;
+        if(minus_dm_prev != DBL_MIN) 
+            sm_minus_dm = ((minus_dm_prev * ema_shifted_dbl) + (sm_minus_dm * ema_shift_dbl)) / ema_period_dbl;
+        adxq.plus_dm = sm_plus_dm; 
+        adxq.minus_dm = sm_minus_dm;
+
+       /* */
+       /// alternately: just use DM within period
+       
+       
         //// conventional plus_di / minus_di
-        // const double plus_di = (sm_plus_dm / atr_cur) * 100;
-        // const double minus_di = (sm_minus_dm / atr_cur)  * 100;
+        // const double plus_di = (sm_plus_dm / atr_cur) * 100.0;
+        // const double minus_di = (sm_minus_dm / atr_cur)  * 100.0;
         //
         //// not used anywhere in reference for common ADX +DI/-DI calculation,
         //// this reliably converts it to a percentage however.
         const double plus_di = 100.0 - (100.0 / (1.0 + (sm_plus_dm / atr_cur)));
         const double minus_di = 100.0 - (100.0 / (1.0 + (sm_minus_dm / atr_cur)));
 
-        if (plus_di == 0 && minus_di == 0)
+        if (dblZero(plus_di) && dblZero(minus_di))
         {
-            // reached e.g in both XAGUSD and AUDCAD M1
-            // not so much elsewhere - zero directional
-            // EMA movement across consecutive chart quotes
-            // within some chart period
             DEBUG("zero plus_di, minus_di at " + offset_time_str(idx));
         }
 
         adxq.plus_di = plus_di;
         adxq.minus_di = minus_di;
         const double di_sum = plus_di + minus_di;
-        if (di_sum == 0)
+        if (dblZero(di_sum))
         {
-            // likewise reached in XAGUSD
             DEBUG("calculated zero di sum at " + offset_time_str(idx));
             adxq.dx = __dblzero__;
         }
         else
         {
-            adxq.dx = fabs((plus_di - minus_di) / di_sum) * 100;
+            // adxq.dx = fabs((plus_di - minus_di) / di_sum) * 100.0;
+            /// alternately, a down-scaled representation for DX factored from DI:
+            adxq.dx =  100.0 - (100.0 / (1.0 + fabs((plus_di - minus_di) / di_sum)));
         }
     };
 
@@ -201,9 +315,9 @@ public:
     // calculation.
     //
     // This method will not produce an EMA for the initial DX value
-    virtual int bind_initial_adx(int extent, const double &high[], const double &low[], const double &close[])
+    virtual int bind_initial_adx(int extent, const double &open[], const double &high[], const double &low[], const double &close[])
     {
-        double next_atr = initial_atr_price(--extent, high, low, close);
+        double next_atr = initial_atr_price(--extent, open, high, low, close);
 
         extent -= ema_period; // for initial ATR
         if (next_atr == 0)
@@ -216,12 +330,14 @@ public:
         DEBUG("(%d, %d) Initial ATR at %s [%d] %f", ema_period, ema_shift, offset_time_str(extent), extent, next_atr);
 
         extent--; // for ADX DM at start of ema_period
-        next_atr = next_atr_price(extent, next_atr, high, low, close);
+        next_atr = next_atr_price(extent, next_atr, open, high, low, close);
 
         DEBUG("(%d, %d) Second ATR at %s [%d] %f", ema_period, ema_shift, offset_time_str(extent), extent, next_atr);
         adxq.atr_price = next_atr;
+        adxq.plus_dm = DBL_MIN;
+        adxq.minus_dm = DBL_MIN;
         // atr_data[extent] = next_atr;
-        bind_adx_quote(extent, high, low, close);
+        bind_adx_quote(extent, open, high, low, close); // ?
         return extent;
     }
 
@@ -231,7 +347,7 @@ public:
     //
     // See also:
     // - bind_initial_adx()
-    virtual void bind_adx_ema(const int idx, const double &high[], const double &low[], const double &close[])
+    virtual void bind_adx_ema(const int idx, const double &open[], const double &high[], const double &low[], const double &close[])
     {
         /// Implementation Note: EMA smothing for +DI/-DI at this point
         /// may produce a side effect of complicating any visual analysis
@@ -250,65 +366,71 @@ public:
         // const double minus_di = adxq.minus_di;
         // set current ATR, using previous
         const double atr_prev = adxq.atr_price;
-        adxq.atr_price = next_atr_price(idx, atr_prev, high, low, close);
+        adxq.atr_price = next_atr_price(idx, atr_prev, open, high, low, close);
 
         /// binding current to adxq
-        bind_adx_quote(idx, high, low, close);
+        bind_adx_quote(idx, open, high, low, close);
+
         /// binding DX EMA to adxq
         adxq.dx = ((dx * (double)ema_shifted_period) + (adxq.dx * (double)ema_shift)) / (double)ema_period;
     };
 
-    // Set current +DI, -DI, and DX EMA at index idx, for that index within the provided
-    // ADX data buffers.
+    // Set current ATR, +DM, -DM, +DI, -DI,  and DX at index idx, to local data buffers
     //
-    // This method assumes adxq was initialized for previous ATR and DX values
+    // This method assumes adxq was initialized for previous data values
     //
     // See also:
     // - bind_initial_adx()
-    virtual void update_adx_ema(const int idx, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
+    virtual void update_adx_ema(const int idx, const double &open[], const double &high[], const double &low[], const double &close[])
     {
         // calculate ADX +DI, -DI, and EMA for DX
-        bind_adx_ema(idx, high, low, close);
+        bind_adx_ema(idx, open, high, low, close);
         DEBUG("[%d] DX %f DI +/- %f/%f", idx, adxq.dx, adxq.plus_di, adxq.minus_di);
-        // bind adxq values to data buffers
-        dx[idx] = adxq.dx;
-        plus_di[idx] = adxq.plus_di;
-        minus_di[idx] = adxq.minus_di;
-        atr_data[idx] = adxq.atr_price;
+        // bind adxq values to internal data buffers
+        adx_buffer_mgr.dx_buffer.data[idx] = adxq.dx;
+        adx_buffer_mgr.plus_dm_buffer.data[idx] = adxq.plus_dm;
+        adx_buffer_mgr.minus_dm_buffer.data[idx] = adxq.minus_dm;
+        adx_buffer_mgr.plus_di_buffer.data[idx] = adxq.plus_di;
+        adx_buffer_mgr.minus_di_buffer.data[idx] = adxq.minus_di;
+        adx_buffer_mgr.atr_buffer.data[idx] = adxq.atr_price;
     };
 
-    // Initialize the provided ADX data arrays for ADX from extent to latest == 0
+    // Initialize local ADX data arrays for ADX from extent to latest == 0
     //
     // This method assumes time-series data access for all data arrays.
-    virtual datetime initialize_adx_data(int extent, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
+    virtual datetime initialize_adx_data(int extent, const double &open[], const double &high[], const double &low[], const double &close[], const int extent_padding = EMPTY)
     {
         const int __latest__ = 0;
-        extent = bind_initial_adx(extent, high, low, close);
+        int idx = bind_initial_adx(extent, open, high, low, close);
+        adx_buffer_mgr.setExtent(extent, extent_padding);
 
         double next_atr = adxq.atr_price;
-        atr_data[extent] = next_atr;
-        dx[extent] = adxq.dx;
-        plus_di[extent] = adxq.plus_di;
-        minus_di[extent] = adxq.minus_di;
-        DEBUG("Initial ADX at %s [%d] DX %f +DI %f -DI %f", offset_time_str(extent), extent, adxq.dx, adxq.plus_di, adxq.minus_di);
+        adx_buffer_mgr.dx_buffer.data[idx] = adxq.dx;
+        adx_buffer_mgr.plus_dm_buffer.data[idx] = adxq.plus_dm;
+        adx_buffer_mgr.minus_dm_buffer.data[idx] = adxq.minus_dm;
+        adx_buffer_mgr.plus_di_buffer.data[idx] = adxq.plus_di;
+        adx_buffer_mgr.minus_di_buffer.data[idx] = adxq.minus_di;
+        adx_buffer_mgr.atr_buffer.data[idx] = next_atr;
 
-        extent--; // for the first ADX quote
+        DEBUG("Initial ADX at %s [%d] DX %f +DI %f -DI %f", offset_time_str(idx), idx, adxq.dx, adxq.plus_di, adxq.minus_di);
 
-        while (extent >= __latest__)
+        idx--; // for the first ADX quote
+
+        while (idx >= __latest__)
         {
-            update_adx_ema(extent, atr_data, dx, plus_di, minus_di, high, low, close);
-            extent--;
+            update_adx_ema(idx, open, high, low, close);
+            idx--;
         }
         latest_quote_dt = iTime(symbol, timeframe, __latest__);
         return latest_quote_dt;
     };
-
+    
     // Initialize the provided ADX data arrays for ADX from extent to latest == 0
     //
     // This method uses a Quote Manager for access to chart high, low, and close quotes.
     // This assumes that the Quote Manager was initialized for time-series data access
     // with high, low, and close rate buffers.
-    virtual datetime initialize_adx_data(QuoteMgrOHLC &quote_mgr, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const int extent = EMPTY)
+    virtual datetime initialize_adx_data(QuoteMgrOHLC &quote_mgr, const int extent = EMPTY)
     {
         // for data initialization within EAs
         const int nrquotes = extent == EMPTY ? iBars(symbol, timeframe) : extent;
@@ -318,32 +440,39 @@ public:
             printf("Failed to copy %d initial rates to quote manager", nrquotes);
             return EMPTY;
         }
-        return initialize_adx_data(nrquotes, atr_data, dx, plus_di, minus_di, quote_mgr.high_buffer.data, quote_mgr.low_buffer.data, quote_mgr.close_buffer.data);
+        return initialize_adx_data(nrquotes, quote_mgr.open_buffer.data, quote_mgr.high_buffer.data, quote_mgr.low_buffer.data, quote_mgr.close_buffer.data);
     }
 
     // Update the provided ADX data arrays from the most recently calculated extent
     // to latest == 0
     //
     // This method assumes time-series data access for all data arrays.
-    virtual datetime update_adx_data(double &atr_data[], double &dx[], double &plus_di[], double &minus_di[], const double &high[], const double &low[], const double &close[])
+    virtual datetime update_adx_data(const double &open[], const double &high[], const double &low[], const double &close[], const int extent = EMPTY, const int padding = EMPTY)
     {
+        if (extent != EMPTY)
+        {
+            adx_buffer_mgr.setExtent(extent, padding);
+        }
+
         // plus one, plus two to ensure the previous ADX is recalculated from final market quote,
         // when the previous ADX was calculated at offset 0 => 1
         int idx = latest_quote_offset() + 1;
         const int prev_idx = idx + 1;
         const int __latest__ = 0;
 
-        const double prev_atr = atr_data[prev_idx];
-        const double prev_dx = dx[prev_idx];
+        const double prev_atr = adx_buffer_mgr.atr_buffer.data[prev_idx];
+        const double prev_dx = adx_buffer_mgr.dx_buffer.data[prev_idx];
+        const double prev_plus_dm = adx_buffer_mgr.plus_dm_buffer.data[prev_idx];
+        const double prev_minus_dm = adx_buffer_mgr.minus_dm_buffer.data[prev_idx];
         // prev_atr here should be the same across ticks
         // for the same initial chart offset 0, before
         // it advances 0 => 1 in effective offset
         DEBUG("updating from %s [%d] initial ATR %f DX %f", offset_time_str(prev_idx), prev_idx, prev_atr, prev_dx);
-        prepare_next_pass(prev_atr, prev_dx);
+        prepare_next_pass(prev_atr, prev_dx, prev_plus_dm, prev_minus_dm);
 
         while (idx >= __latest__)
         {
-            update_adx_ema(idx, atr_data, dx, plus_di, minus_di, high, low, close);
+            update_adx_ema(idx, open, high, low, close);
             idx--;
         }
         latest_quote_dt = iTime(symbol, timeframe, __latest__);
@@ -356,116 +485,14 @@ public:
     // This method uses a Quote Manager for access to chart high, low, and close quotes.
     // This assumes that the Quote Manager was initialized for time-series data access
     // with high, low, and close rate buffers.
-    virtual datetime update_adx_data(QuoteMgrOHLC &quote_mgr, double &atr_data[], double &dx[], double &plus_di[], double &minus_di[])
+ 
+    virtual datetime update_adx_data(QuoteMgrOHLC &quote_mgr, const int _extent = EMPTY, const int _padding = EMPTY)
     {
-        // for data update within EAs
-        const int extent = latest_quote_offset() + ema_period + 3;
-        DEBUG("Updating for %d quotes", extent);
-        if (!quote_mgr.copyRates(extent))
-        {
-            printf("Failed to copy %d rates to quote manager", extent);
-            return EMPTY;
-        }
-        return update_adx_data(atr_data, dx, plus_di, minus_di, quote_mgr.high_buffer.data, quote_mgr.low_buffer.data, quote_mgr.close_buffer.data);
+        return update_adx_data(quote_mgr.open_buffer.data, quote_mgr.high_buffer.data, quote_mgr.low_buffer.data, quote_mgr.close_buffer.data, _extent, _padding);
     };
 };
 
-// Iterator for ADX indicator data, providing internal data storage
-class ADXBuffer : public ADXIter
-{
-
-protected:
-    void init_buffers()
-    {
-        atr_buffer = new RateBuffer();
-        dx_buffer = new RateBuffer();
-        plus_di_buffer = new RateBuffer();
-        minus_di_buffer = new RateBuffer();
-    }
-
-    ADXBuffer(string _symbol, int _timeframe) : ADXIter(_symbol, _timeframe)
-    {
-        init_buffers();
-    }
-
-public:
-    RateBuffer *atr_buffer;
-    RateBuffer *dx_buffer;
-    RateBuffer *plus_di_buffer;
-    RateBuffer *minus_di_buffer;
-
-    ADXBuffer(int period, int period_shift = 1, string _symbol = NULL, int _timeframe = EMPTY) : ADXIter(period, period_shift, _symbol, _timeframe)
-    {
-        init_buffers();
-    };
-
-    ~ADXBuffer()
-    {
-        delete atr_buffer;
-        delete dx_buffer;
-        delete plus_di_buffer;
-        delete minus_di_buffer;
-    };
-
-    // increase the length of the indicator data buffers
-    bool setExtent(int extent)
-    {
-        if (!atr_buffer.setExtent(extent))
-            return false;
-        if (!dx_buffer.setExtent(extent))
-            return false;
-        if (!plus_di_buffer.setExtent(extent))
-            return false;
-        if (!minus_di_buffer.setExtent(extent))
-            return false;
-        return true;
-    };
-
-    // reduce the length of the indicator data buffers
-    bool reduceExtent(int extent)
-    {
-        if (!atr_buffer.reduceExtent(extent))
-            return false;
-        if (!dx_buffer.reduceExtent(extent))
-            return false;
-        if (!plus_di_buffer.reduceExtent(extent))
-            return false;
-        if (!minus_di_buffer.reduceExtent(extent))
-            return false;
-        return true;
-    };
-
-    // Initialize the indicator data buffers with high, low, close quotes via a time-series
-    // Quote Manager
-    virtual datetime initialize_adx_data(QuoteMgrOHLC &quote_mgr, const int extent = EMPTY)
-    {
-        setExtent(extent == EMPTY ? iBars(symbol, timeframe) : extent);
-        return initialize_adx_data(quote_mgr, atr_buffer.data, dx_buffer.data, plus_di_buffer.data, minus_di_buffer.data, extent);
-    };
-
-    // Initialize the indicator data buffers from time-series high, low, and close quotes
-    virtual datetime initialize_adx_data(const int extent, const double &high[], const double &low[], const double &close[])
-    {
-        setExtent(extent);
-        return initialize_adx_data(extent, atr_buffer.data, dx_buffer.data, plus_di_buffer.data, minus_di_buffer.data, high, low, close);
-    };
-
-    // Update the indicator data buffers with a time-series Quote Manager
-    virtual datetime update_adx_data(QuoteMgrOHLC &quote_mgr)
-    {
-        setExtent(quote_mgr.extent);
-        return update_adx_data(quote_mgr, atr_buffer.data, dx_buffer.data, plus_di_buffer.data, minus_di_buffer.data);
-    };
-
-    // Update the indicator data buffers from time-series high, low, and close quotes
-    virtual datetime update_adx_data(const double &high[], const double &low[], const double &close[], const int extent = EMPTY)
-    {
-        setExtent(extent == EMPTY ? ArraySize(high) : extent);
-        return update_adx_data(atr_buffer.data, dx_buffer.data, plus_di_buffer.data, minus_di_buffer.data, high, low, close);
-    };
-};
-
-class ADXAvgBuffer : public ADXBuffer
+class ADXAvgBuffer : public ADXIter
 {
 
 protected:
@@ -478,7 +505,7 @@ public:
     double total_weights;
     int longest_period;
 
-    ADXAvgBuffer(const int n_members, const int &periods[], const int &period_shifts[], const double &weights[], const string _symbol = NULL, const int _timeframe = EMPTY) : n_adx_members(n_members), ADXBuffer(_symbol, _timeframe)
+    ADXAvgBuffer(const int n_members, const int &periods[], const int &period_shifts[], const double &weights[], const string _symbol = NULL, const int _timeframe = EMPTY) : n_adx_members(n_members), ADXIter(_symbol, _timeframe)
     {
 
         ArrayResize(m_iter, n_adx_members);
@@ -511,7 +538,7 @@ public:
             {
                 add_idx = idx;
             }
-            m_iter[add_idx] = new ADXIter(per, shift, _symbol, _timeframe);
+            m_iter[add_idx] = new ADXIter(per, shift, price_mode, _symbol, _timeframe);
             m_weights[add_idx] = weight;
             last_per = per;
         }
@@ -553,8 +580,7 @@ public:
         return n_adx_members;
     };
 
-        
-    virtual int bind_initial_adx(int extent, const double &high[], const double &low[], const double &close[])
+    virtual int bind_initial_adx(int extent, const double &open[], const double &high[], const double &low[], const double &close[])
     {
 
         DEBUG("Calculating Initial Avg ADX for %d", extent);
@@ -571,15 +597,15 @@ public:
             double weight = m_weights[n];
             if (first_extent == -1)
             {
-                first_extent = it.bind_initial_adx(extent, high, low, close);
+                first_extent = it.bind_initial_adx(extent, open, high, low, close);
             }
             else
             {
-                next_extent = it.bind_initial_adx(extent, high, low, close);
+                next_extent = it.bind_initial_adx(extent, open, high, low, close);
                 for (int idx = next_extent; idx <= first_extent; idx++)
                 {
                     // fast-forward to the start for the ADX with longest period
-                    it.bind_adx_ema(idx, high, low, close);
+                    it.bind_adx_ema(idx, open, high, low, close);
                 }
             }
             avg_atr += (it.bound_atr_price() * weight);
@@ -598,7 +624,7 @@ public:
         return first_extent;
     }
 
-    virtual void bind_adx_ema(const int idx, const double &high[], const double &low[], const double &close[])
+    virtual void bind_adx_ema(const int idx, const double &open[], const double &high[], const double &low[], const double &close[])
     {
         DEBUG("Binding Avg ADX EMA %d", idx);
         double avg_atr = __dblzero__;
@@ -609,7 +635,7 @@ public:
         {
             ADXIter *it = m_iter[n];
             double weight = m_weights[n];
-            it.bind_adx_ema(idx, high, low, close);
+            it.bind_adx_ema(idx, open, high, low, close);
             avg_atr += (it.bound_atr_price() * weight);
             avg_dx += (it.bound_dx() * weight);
             avg_plus_di += (it.bound_plus_di() * weight);
@@ -625,5 +651,6 @@ public:
         adxq.minus_di = avg_minus_di;
     }
 };
+
 
 #endif

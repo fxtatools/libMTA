@@ -12,7 +12,9 @@
 
 #include <libMQL4.mq4>
 
+#include <pricemode.mq4>
 #include "chartable.mq4"
+#include "rates.mq4"
 
 /**
  * Iterator for Average True Range calculation
@@ -91,111 +93,176 @@ class ATRIter : public Chartable
 {
 protected:
     const int ema_shifted_period;
-    const double points_ratio;
 
-    ATRIter(string _symbol, int _timeframe) : ema_period(EMPTY), ema_shift(EMPTY), ema_shifted_period(EMPTY), points_ratio(NULL), latest_quote_dt(0), Chartable(_symbol, _timeframe){};
+    // for the ADX Avg implementation
+    ATRIter(string _symbol, int _timeframe) : ema_period(EMPTY), ema_shift(EMPTY), ema_shifted_period(EMPTY), latest_quote_dt(0), Chartable(_symbol, _timeframe){};
+
+    class ATRBufferMgr : public BufferMgr
+    {
+    public:
+        RateBuffer *atr_buffer;
+        ATRBufferMgr(const int extent = 0)
+        {
+            atr_buffer = new RateBuffer(extent, true);
+            first_buffer = atr_buffer; // for BufferMgr protocol
+        }
+        ~ATRBufferMgr()
+        {
+            FREEPTR(atr_buffer);
+        }
+    };
+
+    ATRBufferMgr *atr_buffer_mgr;
 
 public:
-    int ema_period;
-    int ema_shift;
+    const int ema_period;
+    const int ema_shift;
+    const int price_mode;
     datetime latest_quote_dt;
 
-    ATRIter(int _ema_period, int _ema_shift = 1, string _symbol = NULL, int _timeframe = EMPTY) : ema_period(_ema_period), ema_shift(_ema_shift), ema_shifted_period(_ema_period - _ema_shift), points_ratio(_symbol == NULL ? _Point : SymbolInfoDouble(_symbol, SYMBOL_POINT)), latest_quote_dt(0), Chartable(_symbol, _timeframe){};
+    // points ratio is used in iATR
+    ATRIter(const int _ema_period, const int _ema_shift = 1, const int _price_mode = PRICE_CLOSE, string _symbol = NULL, const int _timeframe = EMPTY) : ema_period(_ema_period), ema_shift(_ema_shift), ema_shifted_period(_ema_period - _ema_shift), price_mode(_price_mode), latest_quote_dt(0), Chartable(_symbol, _timeframe)
+    {
+        atr_buffer_mgr = new ATRBufferMgr(0);
+    };
+    ~ATRIter()
+    {
+        FREEPTR(atr_buffer_mgr);
+    }
 
-    ATRIter(int _ema_period, double _points_ratio, int _ema_shift = 1, string _symbol = NULL, int _timeframe = EMPTY) : ema_period(_ema_period), ema_shift(_ema_shift), ema_shifted_period(_ema_period - _ema_shift), points_ratio(_symbol == NULL ? _Point : SymbolInfoDouble(_symbol, SYMBOL_POINT)), latest_quote_dt(0), Chartable(_symbol, _timeframe){};
+    RateBuffer *atr_buffer() { return atr_buffer_mgr.atr_buffer; };
+
+    bool setExtent(const int extent, const int padding = EMPTY)
+    {
+        return atr_buffer_mgr.setExtent(extent, padding);
+    }
+
+    bool reduceExtent(const int extent, const int padding = EMPTY)
+    {
+        return atr_buffer_mgr.reduceExtent(extent, padding);
+    }
 
     const int latest_quote_offset()
     {
         return iBarShift(symbol, timeframe, latest_quote_dt, false);
     };
 
-    double points_to_price(const double points)
+    double tr_price(const int idx, const double &open[], const double &high[], const double &low[], const double &close[])
     {
-        if (points_ratio == NULL)
-        {
-            return points;
-        }
-        else
-        {
-            return points * points_ratio;
-        }
-    };
-
-    double price_to_points(const double price)
-    {
-        if (points_ratio == NULL)
-        {
-            return price;
-        }
-        else
-        {
-            return price / points_ratio;
-        }
-    };
-
-    double next_tr_price(const int idx, const double &high[], const double &low[], const double &close[])
-    {
-        // not applicable for the first True Range value
-        const double prev_close = close[idx + 1];
+        const double prev_price = price_for(idx + 1, price_mode, open, high, low, close);
         const double cur_high = high[idx];
         const double cur_low = low[idx];
-        //// simplified calculation [Wik]
-        return MathMax(cur_high, prev_close) - MathMin(cur_low, prev_close);
+        //// simplified calculation. reference:
+        //// Pruitt, G. (2016). Stochastics and Averages and RSI! Oh, My. 
+        ////   In The Ultimate Algorithmic Trading System Toolbox + Website (pp. 25–76). 
+        ////   John Wiley & Sons, Inc. https://doi.org/10.1002/9781119262992.ch2
+        //// - Locally adapted to use a configurable price other than close,
+        ////   for previous price
+        return MathMax(cur_high, prev_price) - MathMin(cur_low, prev_price);
     };
 
-    double initial_atr_price(int extent, const double &high[], const double &low[], const double &close[])
+    double initial_atr_price(int extent, const double &open[], const double &high[], const double &low[], const double &close[])
     {
         double atr_sum = high[extent] - low[extent];
         DEBUG("initial atr sum [%d] %f", extent, atr_sum);
         for (int n = 1; n < ema_period; n++)
         {
-            atr_sum += next_tr_price(--extent, high, low, close);
+            atr_sum += tr_price(--extent, open, high, low, close);
             DEBUG("initial atr sum [%d] %f", extent, atr_sum);
         }
         return atr_sum / ema_period;
     };
 
-    double initial_atr_points(int extent, const double &high[], const double &low[], const double &close[])
+    double initial_atr_points(int extent, const double &open[],const double &high[], const double &low[], const double &close[])
     {
-        return price_to_points(initial_atr_price(extent, high, low, close));
+        return pricePoints(initial_atr_price(extent, open, high, low, close));
     };
 
-    double next_atr_price(const int idx, const double prev_price, const double &high[], const double &low[], const double &close[])
+    double next_atr_price(const int idx, const double prev_price, const double &open[], const double &high[], const double &low[], const double &close[])
     {
-        return ((prev_price * ema_shifted_period) + (next_tr_price(idx, high, low, close) * ema_shift)) / ema_period;
+        // As a minor point of divergence to Wilder's ATR: For current ATR,
+        // this uses a moving weighted average of TR price within the EMA period
+        // before calculating the EMA (shifted) price with this current ATR
+        const double ema_period_dbl = (double) ema_period;
+        double weights = __dblzero__;
+        double atr_cur = __dblzero__;
+        for(int n = idx + ema_period, p_k = 1; n >= idx; n--, p_k++) {
+            const double wfactor = (double)p_k / ema_period_dbl;
+            const double tr_cur = tr_price(idx, open, high, low, close);
+            atr_cur += (tr_cur * wfactor);
+            weights += wfactor;
+        }
+        atr_cur /= weights;
+        return ((prev_price * ema_shifted_period) + (atr_cur * ema_shift)) / ema_period;
     };
 
-    double next_atr_points(const int idx, const double prev_points, const double &high[], const double &low[], const double &close[])
+    double next_atr_points(const int idx, const double prev_points, const double &open[], const double &high[], const double &low[], const double &close[])
     {
-        return price_to_points(next_atr_price(idx, points_to_price(prev_points), high, low, close));
+        return pricePoints(next_atr_price(idx, pointsPrice(prev_points), open, high, low, close));
     };
 
-    void initialize_atr_points(int extent, double &atr[], const double &high[], const double &low[], const double &close[])
+    void initialize_atr_points(int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const int padding = EMPTY)
     {
+        setExtent(_extent, padding);
         const int __latest__ = 0;
-        double last_atr = initial_atr_price(--extent, high, low, close);
-        extent -= ema_period;
-        atr[extent] = price_to_points(last_atr);
-        DEBUG("Initial ATR at %s: %f", offset_time_str(extent), price_to_points(last_atr));
-        while (extent != __latest__)
+        double last_atr = initial_atr_price(--_extent, open, high, low, close);
+        _extent -= ema_period;
+        atr_buffer_mgr.atr_buffer.data[_extent] = pricePoints(last_atr);
+        DEBUG("Initial ATR at %s: %f", offset_time_str(_extent), pricePoints(last_atr));
+        while (_extent != __latest__)
         {
-            last_atr = next_atr_price(--extent, last_atr, high, low, close);
-            atr[extent] = price_to_points(last_atr);
+            last_atr = next_atr_price(--_extent, last_atr, open, high, low, close);
+            atr_buffer_mgr.atr_buffer.data[_extent] = pricePoints(last_atr);
         }
         latest_quote_dt = iTime(symbol, timeframe, __latest__);
     };
 
-    void update_atr_points(double &atr[], const double &high[], const double &low[], const double &close[])
+    void update_atr_points(const double &open[],const double &high[], const double &low[], const double &close[], const int _extent = EMPTY, const int padding = EMPTY)
     {
+        if (_extent != EMPTY)
+            setExtent(_extent, padding);
         // plus one, plus two to ensure the previous ATR is recalculated from final market quote,
         // mainly when the previous ATR was calculated at offset 0
-        int extent = latest_quote_offset() + 1;
-        double latest_atr = atr[extent + 1];
-        while (extent != -1)
+        int idx = latest_quote_offset() + 1;
+        double latest_atr = atr_buffer_mgr.atr_buffer.data[idx + 1];
+        while (idx >= 0)
         {
-            latest_atr = next_atr_points(extent, latest_atr, high, low, close);
-            atr[extent] = latest_atr;
-            extent--;
+            latest_atr = next_atr_points(idx, latest_atr, open, high, low, close);
+            atr_buffer_mgr.atr_buffer.data[idx] = latest_atr;
+            idx--;
+        }
+        latest_quote_dt = iTime(symbol, timeframe, 0);
+    };
+
+    void initialize_atr_price(int _extent, const double &open[],const double &high[], const double &low[], const double &close[], const int padding = EMPTY)
+    {
+        setExtent(_extent, padding);
+        const int __latest__ = 0;
+        double last_atr = initial_atr_price(--_extent, open, high, low, close);
+        _extent -= ema_period;
+        atr_buffer_mgr.atr_buffer.data[_extent] = last_atr;
+        DEBUG("Initial ATR at %s: %f", offset_time_str(_extent), last_atr);
+        while (_extent != __latest__)
+        {
+            last_atr = next_atr_price(--_extent, last_atr, open, high, low, close);
+            atr_buffer_mgr.atr_buffer.data[_extent] = last_atr;
+        }
+        latest_quote_dt = iTime(symbol, timeframe, __latest__);
+    };
+
+    void update_atr_price(const double &open[],const double &high[], const double &low[], const double &close[], const int _extent = EMPTY, const int padding = EMPTY)
+    {
+        if (_extent != EMPTY)
+            setExtent(_extent, padding);
+        // plus one, plus two to ensure the previous ATR is recalculated from final market quote,
+        // mainly when the previous ATR was calculated at offset 0
+        int idx = latest_quote_offset() + 1;
+        double latest_atr = atr_buffer_mgr.atr_buffer.data[idx + 1];
+        while (idx >= 0)
+        {
+            latest_atr = next_atr_price(idx, latest_atr, open, high, low, close);
+            atr_buffer_mgr.atr_buffer.data[idx] = latest_atr;
+            idx--;
         }
         latest_quote_dt = iTime(symbol, timeframe, 0);
     };

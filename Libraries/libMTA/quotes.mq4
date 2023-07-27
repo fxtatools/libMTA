@@ -2,6 +2,7 @@
 #ifndef _QUOTES_MQ4
 #define _QUOTES_MQ4 1
 
+#include "rates.mq4"
 
 // Quote Manager constants
 #define QUOTE_TIME 1
@@ -15,16 +16,6 @@
 
 class QuoteMgrOHLC : public Chartable
 {
-
-    // FIXME/TBD implementing quote buffers for time, volume
-    // - copy into separate arrays as presently? This would be compatible with indicator-based calculations
-    // - or use an array of MqlTick from here to the point of calculation?
-    //
-    // FIXME provide interface functions
-    // - quoteOpen(index), quoteHigh(index), ....
-    //
-    // TBD
-    // - fillOpen(cont int extent, double open_rates[]) ...
 public:
     RateBuffer *open_buffer;
     RateBuffer *high_buffer;
