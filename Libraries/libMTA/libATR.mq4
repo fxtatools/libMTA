@@ -227,7 +227,10 @@ public:
             weights += wfactor;
         }
         atr_cur /= weights;
-        atr_cur = ((atr_pre * ema_shifted_period) + (atr_cur * ema_shift)) / ema_period;
+        /// shifted Wilder (??) EMA
+        // atr_cur = ((atr_pre * ema_shifted_period) + (atr_cur * ema_shift)) / ema_period;
+        /// standard EMA  (forward shift unused here)
+        atr_cur = ema(atr_pre, atr_cur, ema_period);
         atr_buffer.setState(atr_cur);
     };
 

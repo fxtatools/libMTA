@@ -201,13 +201,19 @@ public:
         */
 
         /// alternately: DM for DI as forward-shifted EMA of the current weighted MA of +DM / -DM
-
+        /*
         const double ema_shifted_dbl = (double)ema_shifted_period;
         const double ema_shift_dbl = (double)ema_shift;
         if (plus_dm_prev != DBL_MIN)
             sm_plus_dm = ((plus_dm_prev * ema_shifted_dbl) + (sm_plus_dm * ema_shift_dbl)) / ema_period_dbl;
         if (minus_dm_prev != DBL_MIN)
             sm_minus_dm = ((minus_dm_prev * ema_shifted_dbl) + (sm_minus_dm * ema_shift_dbl)) / ema_period_dbl;
+        */
+       /// or: standard ema (forward-shift unused here)
+       if (plus_dm_prev != DBL_MIN)
+            sm_plus_dm = ema(plus_dm_prev, sm_plus_dm, ema_period);
+        if (minus_dm_prev != DBL_MIN)
+            sm_minus_dm = ema(minus_dm_prev, sm_minus_dm, ema_period);
         plus_dm_buffer.setState(sm_plus_dm);
         minus_dm_buffer.setState(sm_minus_dm);
 
@@ -216,13 +222,13 @@ public:
         /// alternately: just use DM within period
 
         //// conventional plus_di / minus_di
-        // const double plus_di = (sm_plus_dm / atr_cur) * 100.0;
-        // const double minus_di = (sm_minus_dm / atr_cur)  * 100.0;
+        const double plus_di = (sm_plus_dm / atr_cur) * 100.0;
+        const double minus_di = (sm_minus_dm / atr_cur)  * 100.0;
         //
         //// not used anywhere in reference for common ADX +DI/-DI calculation,
         //// this reliably converts it to a percentage however.
-        const double plus_di = 100.0 - (100.0 / (1.0 + (sm_plus_dm / atr_cur)));
-        const double minus_di = 100.0 - (100.0 / (1.0 + (sm_minus_dm / atr_cur)));
+        // const double plus_di = 100.0 - (100.0 / (1.0 + (sm_plus_dm / atr_cur)));
+        // const double minus_di = 100.0 - (100.0 / (1.0 + (sm_minus_dm / atr_cur)));
 
         if (dblZero(plus_di) && dblZero(minus_di))
         {
@@ -296,7 +302,10 @@ public:
         calcDx(idx, open, high, low, close);
         /// ADX
         const double dx_cur = dx_buffer.getState();
-        const double adx = ((adx_pre * (double)ema_shifted_period) + (dx_cur * (double)ema_shift)) / (double)ema_period;
+        /// forward-shifted EMA
+        // const double adx = ((adx_pre * (double)ema_shifted_period) + (dx_cur * (double)ema_shift)) / (double)ema_period;
+        /// conventional EMA (forward-shift unused here)
+        const double adx = ema(adx_pre, dx_cur, ema_period);
         DEBUG(indicator_name() + " DX (%f, %f) => %f at %s [%d]", adx_pre, dx_cur, adx, offset_time_str(idx), idx);
         dx_buffer.setState(adx);
     };
