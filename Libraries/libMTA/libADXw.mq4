@@ -59,8 +59,8 @@ public:
         for (int offset = idx + ema_period, p_k = 1; offset >= idx; offset--, p_k++)
         {
             // TBD using forward-weighted moving WMA for +DM/-DM as here
-            const double mov_plus = plus_dm_movement(offset, high, low);
-            const double mov_minus = minus_dm_movement(offset, high, low);
+            const double mov_plus = getPlusDm(offset, high, low);
+            const double mov_minus = movementMinusDm(offset, high, low);
             const double wfactor = (double)p_k / ema_p_dbl;
 
             if (mov_plus > 0 && mov_plus > mov_minus)

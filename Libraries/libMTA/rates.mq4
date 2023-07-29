@@ -8,109 +8,73 @@
 #endif
 
 #ifndef DELPTR
-#define DELPTR(_PTR_) \
-    if (CheckPointer(_PTR_) == POINTER_DYNAMIC) { \
-        delete _PTR_; \
+#define DELPTR(_PTR_)                           \
+    if (CheckPointer(_PTR_) == POINTER_DYNAMIC) \
+    {                                           \
+        delete _PTR_;                           \
     }
 #endif
 
 #ifndef FREEPTR
 #define FREEPTR(_PTR_) \
-    if (_PTR_ != NULL) { \
+    if (_PTR_ != NULL) \
+    {                  \
         DELPTR(_PTR_); \
-        _PTR_ = NULL; \
+        _PTR_ = NULL;  \
     }
 #endif
 
-class RateBuffer
+template <typename T>
+class DataBuffer
 {
 protected:
     virtual int extent_scale_padding(const int ext_diff, const int padding = QUOTE_PADDING)
     {
         return (int)(ceil(ext_diff / padding) * padding);
     }
-    RateBuffer *next_buffer;
+    T initial_state; // interstitial state storage for implementations. 
+    // ^ MQL compiler fails to compile any pointer declaration `T *initial_state` here
 
 public:
     int expand_extent;
     int extent;
-    double data[];
+    T data[];
 
-    RateBuffer(const int _extent = 0, const bool as_series = true, const int n_more = 0)
+    DataBuffer(const int _extent = 0, const bool as_series = true)
     {
         expand_extent = 0;
         setExtent(_extent);
         setAsSeries(as_series);
-        if (n_more == 0)
-        {
-            next_buffer = NULL;
-        }
-        else
-        {
-            next_buffer = new RateBuffer(_extent, as_series, n_more - 1);
-        }
     };
-    ~RateBuffer()
+    ~DataBuffer()
     {
         ArrayFree(data);
-        FREEPTR(next_buffer);
     };
 
-    /// @brief retrieve the next buffer this RateBuffer
-    /// @return the next RateBuffer, or NULL if this rate buffer has not
-    ///  been defined with a next buffer
-    RateBuffer *next()
+    T get(const int idx)
     {
-        return next_buffer;
-    }
-
-    /// @brief return the nth linked member of this linked RateBuffer series
-    /// @param n relative index of the linked member
-    /// @return this rate buffer if `n == 0`,
-    //   else NULL if there is no next buffer,
-    //   else the {n-1}th next buffer
-    RateBuffer *nth(const int n)
-    {
-        if (n == 0)
-        {
-            return &this;
-        }
-        else if (next_buffer == NULL)
-        {
-            return NULL;
-        }
-        else
-        {
-            return next_buffer.nth(n - 1);
-        }
+        // this assumes a value has been initialized at idx
+        return data[idx];
     };
 
-    /// @brief return the last linked RateBuffer of this series
-    /// @return this buffer, if the next buffer is NULL, else 
-    //    the last of the next buffer
-    RateBuffer *last() {
-        if (next_buffer == NULL) {
-            return &this;
-        } else {
-            return next_buffer.last();
-        }
+    T getState() {
+        return initial_state;
     }
 
-    /// @brief set a RateBuffer as this buffer's next buffer
-    /// @param next RateBuffer to set as this buffer's next buffer
-    /// @return NULL if no rate buffer was previously defined as the next buffer,
-    //   else the previously defined next buffer
-    RateBuffer *setNext(RateBuffer *next)
+    void set(const int idx, const T datum)
     {
-        RateBuffer *prev_next = next_buffer;
-        next_buffer = next;
-        return prev_next;
+        // this assumes the buffer's extent is already > idx
+        data[idx] = datum;
+    };
+
+    void setState(const T datum) {
+        initial_state = datum;
     }
 
     /// @brief increase the length of this and all linked data buffers
     /// @param len new length for linked data buffers
     /// @param value for padding. If a literal value, the value will be used as additional
-    ///   buffer padding. if EMPTY, padding will be added under a factor of QUOTE_PADDING. 
+    ///   buffer padding. if EMPTY, padding will be added under a factor of QUOTE_PADDING.
     ///   This value may be provided as 0, to indicate no padding.
     /// @return true if the data array for this and all linked buffers was resized, else false
     bool setExtent(int len, const int padding = EMPTY)
@@ -131,17 +95,13 @@ public:
             expand_extent = new_ext;
         }
         extent = len;
-
-        if (next_buffer == NULL)
-            return true;
-        else
-            return next_buffer.setExtent(len, padding);
-    }
+        return true;
+    };
 
     /// @brief reduce the length of this and all linked data buffers
     /// @param len new length for linked data buffers
     /// @param value for padding. If a literal value, the value will be used as additional
-    ///   buffer padding. if EMPTY, padding will be added under a factor of QUOTE_PADDING. 
+    ///   buffer padding. if EMPTY, padding will be added under a factor of QUOTE_PADDING.
     ///   This value may be provided as 0, to indicate no padding.
     /// @return true if the data array for this and all linked buffers was resized, else false
     bool reduceExtent(int len, const int padding = EMPTY)
@@ -157,14 +117,9 @@ public:
         {
             extent = len;
             expand_extent = reduced;
-            if (next_buffer == NULL)
-                return true;
-            else
-                return next_buffer.setExtent(len, padding);
+            return true;
         }
-    }
-
-    //
+    };
 
     /// @brief configure the and all linked data buffers to be accessed as/not as
     //  MetaTrader time-series data
@@ -172,49 +127,211 @@ public:
     /// @return true if this and all linked buffers were set as series, else false.
     bool setAsSeries(const bool as_series = true)
     {
-        const bool set_p = ArraySetAsSeries(data, as_series);
-        if (set_p && (next_buffer != NULL))
-            return next_buffer.setAsSeries(as_series);
-        else
-            return set_p;
-    }
+        return ArraySetAsSeries(data, as_series);
+    };
 };
 
+template <typename T>
+class LinkedBuffer : public DataBuffer<T>
+{
+protected:
+    LinkedBuffer<T> *next_buffer;
+
+public:
+    LinkedBuffer()
+    {
+        next_buffer = NULL;
+    }
+
+    LinkedBuffer(const int _extent = 0, const bool as_series = true) : DataBuffer(_extent, as_series){};
+    ~LinkedBuffer()
+    {
+        FREEPTR(next_buffer);
+    };
+
+    /// @brief retrieve the next buffer to this LinkedBuffer
+    /// @return the next LinkedBuffer, or NULL if this linked buffer has not
+    ///   been defined with a next buffer
+    LinkedBuffer *next()
+    {
+        return next_buffer;
+    };
+
+    /// @brief return the nth linked member of this linked LinkedBuffer series
+    /// @param n relative index of the linked member
+    /// @return this rate buffer when `n == 0`,
+    //    else NULL when there is no next buffer,
+    //    else the {n-1}th next buffer
+    LinkedBuffer *nth(const int n)
+    {
+        if (n == 0)
+        {
+            return &this;
+        }
+        else if (next_buffer == NULL)
+        {
+            return NULL;
+        }
+        else
+        {
+            return next_buffer.nth(n - 1);
+        }
+    };
+
+    /// @brief return the last linked LinkedBuffer of this series
+    /// @return this buffer, if the next buffer is NULL, else
+    //    the last of the next buffer
+    LinkedBuffer *last()
+    {
+        if (next_buffer == NULL)
+        {
+            return &this;
+        }
+        else
+        {
+            return next_buffer.last();
+        }
+    };
+
+    /// @brief set a LinkedBuffer as this buffer's next buffer
+    /// @param next LinkedBuffer to set as this buffer's next buffer
+    /// @return NULL if no rate buffer was previously defined as the next buffer,
+    //   else the previously defined next buffer
+    LinkedBuffer *setNext(LinkedBuffer *next)
+    {
+        LinkedBuffer *prev_next = next_buffer;
+        next_buffer = next;
+        return prev_next;
+    };
+
+    /// @brief increase the length of this and all linked data buffers
+    /// @param len new length for linked data buffers
+    /// @param value for padding. If a literal value, the value will be used as additional
+    ///   buffer padding. if EMPTY, padding will be added under a factor of QUOTE_PADDING.
+    ///   This value may be provided as 0, to indicate no padding.
+    /// @return true if the data array for this and all linked buffers was resized, else false
+    bool setExtent(int len, const int padding = EMPTY)
+    {
+        const bool rslt = DataBuffer<T>::setExtent(len, padding);
+        if (rslt && (next_buffer != NULL))
+            return next_buffer.setExtent(len, padding);
+        else
+            return rslt;
+    };
+
+    /// @brief reduce the length of this and all linked data buffers
+    /// @param len new length for linked data buffers
+    /// @param value for padding. If a literal value, the value will be used as additional
+    ///   buffer padding. if EMPTY, padding will be added under a factor of QUOTE_PADDING.
+    ///   This value may be provided as 0, to indicate no padding.
+    /// @return true if the data array for this and all linked buffers was resized, else false
+    bool reduceExtent(int len, const int padding = EMPTY)
+    {
+        const bool rslt = DataBuffer<T>::reduceExtent(len, padding);
+        if (rslt && (next_buffer != NULL))
+            return next_buffer.reduceExtent(len, padding);
+        else
+            return rslt;
+    };
+
+    /// @brief configure the and all linked data buffers to be accessed as/not as
+    //  MetaTrader time-series data
+    /// @param as_series boolean flag for MT4 ArraySetAsSeries()
+    /// @return true if this and all linked buffers were set as series, else false.
+    bool setAsSeries(const bool as_series = true)
+    {
+        const bool rslt = DataBuffer<T>::setAsSeries(as_series);
+        if (rslt && (next_buffer != NULL))
+            return next_buffer.setAsSeries(as_series);
+        else
+            return rslt;
+    };
+};
+
+template <typename T>
 class BufferMgr
 {
 public:
-    RateBuffer *first_buffer;
+    T *primary_buffer;
+    int extent;
 
-    BufferMgr(const int extent = 0, const bool as_series = true, const int n_linked = 0)
+    BufferMgr()
     {
-        if (CheckPointer(first_buffer) == POINTER_INVALID) {
-            first_buffer = NULL;
-        }
-    }
+        primary_buffer = NULL;
+        extent = EMPTY;
+    };
     ~BufferMgr()
     {
-        FREEPTR(first_buffer);
+        FREEPTR(primary_buffer);
     };
 
-    RateBuffer *nth_buffer(const int n)
+    BufferMgr(const int _extent, const bool as_series = true) : extent(_extent)
     {
-        return first_buffer.nth(n);
+        primary_buffer = new T(_extent, as_series);
     };
 
-    RateBuffer *last_buffer() 
+    virtual bool setExtent(const int _extent, const int padding = EMPTY)
     {
-        return first_buffer.last();
-    }
-
-    virtual bool setExtent(const int extent, const int padding = EMPTY)
-    {
-        return first_buffer.setExtent(extent, padding);
+        if (_extent == extent)
+            return true;
+        else
+            return primary_buffer.setExtent(_extent, padding);
     };
 
-    virtual bool reduceExtent(const int extent, const int padding = EMPTY)
+    virtual bool reduceExtent(const int _extent, const int padding = EMPTY)
     {
-        return first_buffer.reduceExtent(extent, padding);
+        if (_extent == extent)
+            return true;
+        else
+            return primary_buffer.reduceExtent(_extent, padding);
     };
 };
+
+/// @brief Template class for Buffer Manager implementations
+/// @tparam T DataBuffer implementation class for this Buffer Manager
+template <typename T>
+class LinkedBufferMgr : public BufferMgr<T>
+{
+public:
+    LinkedBufferMgr(const int _extent = 0, const bool as_series = true, const int n_linked = 0)
+    {
+        extent = _extent;
+        primary_buffer = new T(_extent, as_series, n_linked);
+    };
+
+    T *nth_buffer(const int n)
+    {
+        return primary_buffer.nth(n);
+    };
+
+    T *last_buffer()
+    {
+        return primary_buffer.last();
+    };
+};
+
+class PriceBuffer : public LinkedBuffer<double>
+{
+public:
+    PriceBuffer(const int _extent = 0, const bool as_series = true, const int n_more = 0) : LinkedBuffer<double>(_extent, as_series)
+    {
+        if (n_more == 0)
+        {
+            this.setNext(NULL);
+        }
+        else
+        {
+            PriceBuffer *nxt = new PriceBuffer(_extent, as_series, n_more - 1);
+            this.setNext(nxt);
+        }
+    };
+};
+
+class PriceMgr : public LinkedBufferMgr<PriceBuffer>
+{
+public:
+    PriceMgr(const int _extent = 0, const bool as_series = true, const int n_linked = 0) : LinkedBufferMgr<PriceBuffer>(_extent, as_series, n_linked){};
+};
+
 
 #endif

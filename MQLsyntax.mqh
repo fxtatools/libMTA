@@ -25,14 +25,14 @@
  * MQL4 Pointers
  **/
 
-
-enum ENUM_POINTER_TYPE {
+enum ENUM_POINTER_TYPE
+{
     POINTER_INVALID,
     POINTER_DYNAMIC,
     POINTER_AUTOMATIC
 };
 
-ENUM_POINTER_TYPE CheckPointer(void* ptr) {};
+ENUM_POINTER_TYPE CheckPointer(void *ptr){};
 
 /**
  * String Functions (FIXME)
@@ -70,7 +70,7 @@ typedef const char *string;
 int ArrayResize(void *array, int new_size, int reserve_size = 0);
 bool ArraySetAsSeries(const void *array, bool flag);
 int ArraySize(const void *array);
-
+void ArrayFree(void *array[]);
 /**
  * Time
  */
@@ -97,11 +97,10 @@ enum _TIME
 };
 
 string TimeToStr(datetime dt, int mode = TIME_DATE | TIME_MINUTES);
-
-int CopyTime(string symbol, int timeframe, int start, int count, datetime times[]);
+string TimeToString(datetime dt, int mode = TIME_DATE | TIME_MINUTES);
 
 /**
- * Charts
+ * Charts and Symbols
  **/
 
 int _Period;
@@ -122,6 +121,41 @@ struct MqlTick
 bool SymbolInfoTick(
     string symbol,
     MqlTick &tick);
+
+struct MqlRates
+{
+    datetime time;    // Quote start time
+    double open;      // Quote open
+    double high;      // Quote high
+    double low;       // Quote low
+    double close;     // Quote close
+    long tick_volume; // Tick volume
+    int spread;       // Quote Spread
+    long real_volume; // Trade volume
+};
+
+int CopyRates(
+    string symbol,
+    ENUM_TIMEFRAMES timeframe,
+    int start,
+    int count,
+    MqlRates rates[]);
+
+int CopyRates(
+    string symbol,
+    ENUM_TIMEFRAMES timeframe,
+    datetime start,
+    int count,
+    MqlRates rates[]);
+
+int CopyRates(
+    string symbol,
+    ENUM_TIMEFRAMES timeframe,
+    datetime start,
+    datetime stop,
+    MqlRates rates[]);
+
+int CopyTime(string symbol, int timeframe, int start, int count, datetime times[]);
 
 /**
  * Graphical Objects
@@ -154,7 +188,8 @@ enum _SHAPE_STYLE
     DRAW_NONE = 12
 };
 
-enum ENUM_LINE_STYLE {
+enum ENUM_LINE_STYLE
+{
     _STYLE_EMPTY = EMPTY,
     STYLE_SOLID,
     STYLE_DASH,
@@ -163,7 +198,8 @@ enum ENUM_LINE_STYLE {
     STYLE_DASHDOTDOT,
 };
 
-enum _LINE_WIDTH {
+enum _LINE_WIDTH
+{
     _LINE_WIDTH_NO_CHANGE,
     _LINE_WIDTH_1,
     _LINE_WIDTH_2,
@@ -172,12 +208,13 @@ enum _LINE_WIDTH {
     _LINE_WIDTH_5
 }
 
-void SetIndexStyle(
-    int index,          // line index
-    _SHAPE_STYLE type,          // line type
-    ENUM_LINE_STYLE style = EMPTY,  // line style
-    _LINE_WIDTH width = _LINE_WIDTH_NO_CHANGE,  // line width
-    color clr = clrNONE // line color
+void
+SetIndexStyle(
+    int index,                                 // line index
+    _SHAPE_STYLE type,                         // line type
+    ENUM_LINE_STYLE style = EMPTY,             // line style
+    _LINE_WIDTH width = _LINE_WIDTH_NO_CHANGE, // line width
+    color clr = clrNONE                        // line color
 );
 
 void SetIndexStyle(
@@ -228,12 +265,12 @@ bool IndicatorSetString(
 
 bool SetIndexBuffer(
     int index,                      // buffer index
-    double *buffer[],                // array
+    double *buffer[],               // array
     ENUM_INDEXBUFFER_TYPE data_type // what will be stored
 );
 
 bool SetIndexBuffer(
-    int index,      // buffer index
+    int index,       // buffer index
     double *buffer[] // array
 );
 
@@ -398,6 +435,7 @@ enum _ORDER_TYPE OrderType();
  **/
 
 double MathAbs(double value);
+double ceil(double value);
 
 /**
  * Indicators
@@ -1727,7 +1765,7 @@ enum _DEINIT_REASON
 #define ArrayCompare() 0
 #define ArrayCopy() 0
 #define ArrayFill() 0
-#define ArrayFree() 0
+// #define ArrayFree() 0
 #define ArrayGetAsSeries() 0
 #define ArrayInitialize() 0
 #define ArrayIsDynamic() 0
@@ -1743,7 +1781,7 @@ enum _DEINIT_REASON
 #define atan() 0
 #define Bars() 0
 #define BarsCalculated() 0
-#define ceil() 0
+// #define ceil() 0
 #define CharArrayToString() 0
 #define ChartApplyTemplate() 0
 #define ChartClose() 0
@@ -1803,7 +1841,7 @@ enum _DEINIT_REASON
 #define CopyHigh() 0
 #define CopyLow() 0
 #define CopyOpen() 0
-#define CopyRates() 0
+// #define CopyRates() 0
 #define CopyRealVolume() 0
 #define CopySpread() 0
 #define CopyTicks() 0
@@ -2103,7 +2141,7 @@ enum _DEINIT_REASON
 #define TimeGMT() 0
 #define TimeGMTOffset() 0
 #define TimeLocal() 0
-#define TimeToString() 0
+// #define TimeToString() 0
 #define TimeToStruct() 0
 #define TimeTradeServer() 0
 #define UninitializeReason() 0

@@ -17,10 +17,10 @@
 class QuoteMgrOHLC : public Chartable
 {
 public:
-    RateBuffer *open_buffer;
-    RateBuffer *high_buffer;
-    RateBuffer *low_buffer;
-    RateBuffer *close_buffer;
+    PriceBuffer *open_buffer;
+    PriceBuffer *high_buffer;
+    PriceBuffer *low_buffer;
+    PriceBuffer *close_buffer;
     int extent;
 
     ~QuoteMgrOHLC()
@@ -39,7 +39,7 @@ public:
     {
         if ((quote_kind & QUOTE_OPEN) != 0)
         {
-            open_buffer = new RateBuffer(_extent);
+            open_buffer = new PriceBuffer(_extent);
             if (open_buffer.extent == -1 || !open_buffer.setAsSeries(as_series))
             {
                 open_buffer = NULL; // FIXME error
@@ -50,7 +50,7 @@ public:
 
         if ((quote_kind & QUOTE_HIGH) != 0)
         {
-            high_buffer = new RateBuffer(_extent);
+            high_buffer = new PriceBuffer(_extent);
             if (high_buffer.extent == -1 || !high_buffer.setAsSeries(as_series))
             {
                 high_buffer = NULL; // FIXME error
@@ -61,7 +61,7 @@ public:
 
         if ((quote_kind & QUOTE_LOW) != 0)
         {
-            low_buffer = new RateBuffer(_extent);
+            low_buffer = new PriceBuffer(_extent);
             if (low_buffer.extent == -1 || !low_buffer.setAsSeries(as_series))
             {
                 low_buffer = NULL; // FIXME error
@@ -72,7 +72,7 @@ public:
 
         if ((quote_kind & QUOTE_CLOSE) != 0)
         {
-            close_buffer = new RateBuffer(_extent);
+            close_buffer = new PriceBuffer(_extent);
             if (close_buffer.extent == -1 || !close_buffer.setAsSeries(as_series))
             {
                 close_buffer = NULL; // FIXME error

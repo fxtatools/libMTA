@@ -18,7 +18,7 @@ enum ENUM_PRICE_MODE {
 };
 
 double price_for(const int idx,
-                 const int mode, // ENUM_PRICE_MODE
+                 const int mode, // ENUM_PRICE_MODE as int ...
                  const double &open[],
                  const double &high[],
                  const double &low[],
@@ -36,18 +36,18 @@ double price_for(const int idx,
     case PRICE_LOW:
         return low[idx];
     case PRICE_MODE_MEDIAN:
-        return (high[idx] + low[idx]) / (double)2;
+        return (high[idx] + low[idx]) / 2.0;
     case PRICE_MODE_TYPICAL:
         // not useful at tick 0, where "close" is indeterminant
-        return (high[idx] + low[idx] + close[idx]) / (double)3;
+        return (high[idx] + low[idx] + close[idx]) / 3.0;
     case PRICE_MODE_WEIGHTED:
         // not useful at tick 0, where "close" is indeterminant
-        return (high[idx] + low[idx] + (close[idx] * 2)) / (double)4;
+        return (high[idx] + low[idx] + (close[idx] * 2)) / 4.0;
     case PRICE_MODE_TYPICAL_OPEN:
-        return (high[idx] + low[idx] + open[idx]) / (double)3;
+        return (high[idx] + low[idx] + open[idx]) / 3.0;
     case PRICE_MODE_WEIGHTED_OPEN:
-        return (high[idx] + low[idx] + (open[idx] * 2)) / (double)4;
-    default: // FIXME reached for int values ?
+        return (high[idx] + low[idx] + (open[idx] * 2)) / 4.0;
+    default: 
         printf("Unknown price mode %d", mode);
         return __dblzero__;
     }

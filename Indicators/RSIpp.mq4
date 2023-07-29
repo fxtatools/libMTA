@@ -22,60 +22,55 @@
 
 #property indicator_level1     70.0
 #property indicator_level2     30.0
-#property indicator_levelcolor clrDimGray
+#property indicator_levelcolor clrDarkSlateGray
 
-#include <../Libraries/libMTA/chartable.mq4>
-#include <../Libraries/libMTA/rates.mq4>
-#include <pricemode.mq4>
+#include <../Libraries/libMTA/indicator.mq4>
 
-extern const int rsi_period = 14;                                 // RSI WMA Period
-extern const ENUM_PRICE_MODE rsi_price_mode = PRICE_MODE_TYPICAL; // Price Mode
+extern const int rsi_period = 10;                                 // RSI MA Period
+extern const ENUM_PRICE_MODE rsi_price_mode = PRICE_MODE_TYPICAL; // Applied Price
 
-class RSIBuffer : public Chartable
+class RSIIndicator : public PriceIndicator
 {
-
 protected:
+    PriceBuffer *rsi_data;
+
 public:
     const int ma_period;
-    const double ma_period_dbl;
     const int price_mode;
-    datetime latest_quote_dt;
 
-    RateBuffer *rsi_data;
-
-    RSIBuffer(const int _ma_period, const int _price_mode, const string _symbol, const int _timeframe) : ma_period(_ma_period), ma_period_dbl((double)ma_period), price_mode(_price_mode), latest_quote_dt(0), Chartable(_symbol, _timeframe)
-    {
-
-        rsi_data = new RateBuffer();
+    RSIIndicator(const int _ma_period, const int _price_mode, const string _symbol = NULL, const int _timeframe = EMPTY, const string _name = "RSI++", const int _nr_buffers = 1) :  ma_period(_ma_period), price_mode(_price_mode), PriceIndicator((_symbol == NULL ? _Symbol : _symbol), (_timeframe == EMPTY ? _Period : _timeframe), _name, _nr_buffers) {
+        rsi_data = price_mgr.primary_buffer;
     };
-    ~RSIBuffer()
-    {
-        delete rsi_data;
+    ~RSIIndicator() {
+        // the data buffer should be deleted within the buffer manager protocol
+        // as activated under the PriceIndicator dtor
+        rsi_data = NULL;
     };
+    
 
-    bool setExtent(const int len, const int padding = EMPTY)
-    {
-        return rsi_data.setExtent(len, padding);
-    };
+    string indicator_name() const {
+        return StringFormat("%s(%d)", name, ma_period);
+    }
 
-    bool reduceExtent(const int len, const int padding = EMPTY)
-    {
-        return rsi_data.reduceExtent(len, padding);
-    };
 
-    double calc_rsi(const int idx, const double &open[], const double &high[], const double &low[], const double &close[])
+    void calcMain(const int idx, const double &open[], const double &high[], const double &low[], const double &close[])
     {
+        // FIXME use EMA of MWMA, to try to smooth out "zero gaps" from p_diff
+        // EMA initial : Just use MWMA
+
         double rs_plus = __dblzero__;
         double rs_minus = __dblzero__;
         double wsum = __dblzero__;
         double weights = __dblzero__;
-        for (int n = idx + rsi_period, p_k = 1; p_k <= rsi_period; p_k++, n--)
+        for (int n = idx + ma_period, p_k = 1; p_k <= ma_period; p_k++, n--)
         {
             const double p_prev = price_for(n + 1, price_mode, open, high, low, close);
             const double p_cur = price_for(n, price_mode, open, high, low, close);
-            const double p_diff = p_cur - p_prev;
-            const double wfactor = (double)p_k / ma_period_dbl;
-            if (p_diff > 0)
+            const double p_diff = p_cur - p_prev; // sometimes zero
+            const double wfactor = (double)p_k / (double)ma_period;
+            if(dblZero(p_diff)) {
+                // continue; // nop
+            } else if (p_diff > 0)
             {
                 rs_plus += (p_diff * wfactor);
             }
@@ -87,62 +82,52 @@ public:
         }
         rs_plus /= weights;
         rs_minus /= weights;
-        const double rs = (rs_minus == 0 ? 0 : rs_plus / rs_minus);
-        const double rsi = 100.0 - (100.0 / (1.0 + rs));
-        return rsi;
+
+        const double rs = (dblZero(rs_minus) ? __dblzero__ : (rs_plus / rs_minus));
+        const double rsi_cur = (rs == __dblzero__ ? rs : 100.0 - (100.0 / (1.0 + rs)));
+        const double rsi_pre = rsi_data.getState();
+        // using EMA of weighted average should ensure this will produce
+        // no zero values in the RSI line
+        //
+        // the resulting RSI line may resemble a MACD line projected entirely
+        // into a positive range
+        // const double store_rsi = (rsi_pre == EMPTY_VALUE ? rsi_cur : ema(rsi_pre, rsi_cur, ma_period));
+        //// alternately, using Wilder's EMA function, generally to an effect of more 
+        ///  sequential smoothing in the RSI indicator line
+        const double store_rsi = (rsi_pre == EMPTY_VALUE ? rsi_cur : emaWilder(rsi_pre, rsi_cur, ma_period));
+        rsi_data.setState(store_rsi);
+    } 
+
+    int calcInitial(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[]) {
+        // clear any present value and calculate an initial RSI for subsequent EMA
+        rsi_data.setState(EMPTY_VALUE);
+        const int calc_idx = _extent - 2 - ma_period;
+        calcMain(calc_idx, open, high, low, close);
+        return calc_idx;
     }
 
-    virtual datetime update_data(const double &open[], const double &high[], const double &low[], const double &close[], const int _extent = EMPTY, const int index = EMPTY)
-    {
-        const int __latest__ = 0;
-
-        if (latest_quote_dt != 0)
-        {
-            setExtent(_extent == EMPTY ? iBars(symbol, timeframe) : _extent);
-        }
-        const int idx_initial = index == EMPTY ? iBarShift(symbol, timeframe, latest_quote_dt) : index;
-
-        for (int idx = idx_initial; idx >= __latest__; idx--)
-        {
-            const double rsi = calc_rsi(idx, open, high, low, close);
-            rsi_data.data[idx] = rsi;
-        }
-
-        latest_quote_dt = iTime(symbol, timeframe, __latest__);
-        return latest_quote_dt;
-    };
-
-    virtual datetime initialize_data(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[])
-    {
-        if (!setExtent(_extent, 0))
-        {
-            printf("Unable to set initial extent %d", _extent);
-            return EMPTY;
-        }
-        DEBUG("Bind intial RSI in %d", _extent);
-        latest_quote_dt = 0;
-        const int calc_idx = _extent - rsi_period - 2; // +1 for previous-price analysis
-        DEBUG("Initializing data [%d/%d]", calc_idx, _extent);
-        latest_quote_dt = 0;
-        return update_data(open, high, low, close, _extent, calc_idx);
-    };
+    void initIndicator() {
+        // does not provide values for the indicator window, e.g indicator shortname
+        // - cf indicator_name()
+        const int first_buffer = 0;
+        SetIndexBuffer(first_buffer, rsi_data.data);
+        SetIndexLabel(first_buffer, "RSI");
+        SetIndexStyle(first_buffer, DRAW_LINE);
+    }   
 };
 
-RSIBuffer *rsi_buffer;
+RSIIndicator *rsi_in;
 
 int OnInit()
 {
-    rsi_buffer = new RSIBuffer(rsi_period, rsi_price_mode, _Symbol, _Period);
+    rsi_in = new RSIIndicator(rsi_period, rsi_price_mode, _Symbol, _Period);
+    printf("Initialized RSI indicator (%d)", rsi_in.nDataBuffers());
 
-    IndicatorBuffers(1);
-    const string shortname = "RSI++";
-    IndicatorShortName(StringFormat("%s(%d)", shortname, rsi_period));
+    IndicatorShortName(rsi_in.indicator_name());
+    IndicatorBuffers(rsi_in.nDataBuffers());
+    rsi_in.initIndicator();
 
-    SetIndexBuffer(0, rsi_buffer.rsi_data.data);
-    SetIndexLabel(0, "RSI");
-    SetIndexStyle(0, DRAW_LINE);
-
-    return INIT_SUCCEEDED;
+    return (INIT_SUCCEEDED);
 };
 
 int OnCalculate(const int rates_total,
@@ -159,17 +144,17 @@ int OnCalculate(const int rates_total,
     if (prev_calculated == 0)
     {
         DEBUG("Initialize for %d quotes", rates_total);
-        rsi_buffer.initialize_data(rates_total, open, high, low, close);
+        rsi_in.initVars(rates_total, open, high, low, close, 0);
     }
     else
     {
         DEBUG("Updating for index %d", rates_total - prev_calculated);
-        rsi_buffer.update_data(open, high, low, close);
+        rsi_in.updateVars(open, high, low, close, 0);
     }
     return rates_total;
 };
 
 void OnDeinit(const int dicode)
 {
-    delete rsi_buffer;
+    FREEPTR(rsi_in);
 };
