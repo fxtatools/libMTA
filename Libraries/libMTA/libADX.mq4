@@ -3,8 +3,6 @@
 #define _LIBADX_MQ4 1
 
 #include "libATR.mq4"
-#include "rates.mq4"
-#include "quotes.mq4"
 #include "trend.mq4" // crossover & binding for ADX
 
 #property library

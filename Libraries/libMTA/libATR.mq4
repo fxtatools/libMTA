@@ -13,8 +13,6 @@
 #include <libMQL4.mq4>
 
 #include <pricemode.mq4>
-#include "chartable.mq4"
-#include "rates.mq4"
 #include "indicator.mq4"
 
 /**
