@@ -5,6 +5,8 @@
 //+------------------------------------------------------------------+
 #property strict
 
+#property indicator_separate_window
+
 #property indicator_buffers 4 // number of drawn buffers
 
 #property indicator_color1 clrYellow
@@ -22,15 +24,9 @@
 #property indicator_level1     20.0
 #property indicator_levelcolor clrDarkSlateGray
 
-/// declared in project file ...
-// #property indicator_separate_window
-
 extern const int iadx_period = 10;                               // EMA Period
 extern const int iadx_period_shift = 3;                          // Forward Shift for EMA Period
 extern const ENUM_APPLIED_PRICE iadx_price_mode = PRICE_TYPICAL; // ATR Applied Price
-
-// libATR supports using e.g by Typical Price when calculating ATR,
-// rather than the conventional close price
 
 #include <../Libraries/libMTA/libADX.mq4>
 

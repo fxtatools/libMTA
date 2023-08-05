@@ -8,8 +8,7 @@
 
 #property indicator_buffers 4 // number of drawn buffers
 
-// FIXME add level descriptor
-// - DX limit at xover = 25
+#property indicator_separate_window
 
 #property indicator_color1 clrYellow
 #property indicator_width1 1

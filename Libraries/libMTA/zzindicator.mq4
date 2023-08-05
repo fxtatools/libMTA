@@ -17,8 +17,8 @@ extern const int zzwave_retrace = 5;                        // Retrace interval 
 
 static int __initial_rates_total__ = EMPTY;
 
-#include <../Libraries/libZZWave/libZZWave.mq4>
-// dblzero:
+#include "libZZWave.mq4"
+
 #include <libMql4.mq4>
 
 #define BUFFER_PADDING 256

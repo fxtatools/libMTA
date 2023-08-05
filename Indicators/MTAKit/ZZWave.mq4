@@ -7,17 +7,15 @@
 #property description "ZZWave High/Low Trace"
 #property strict
 
-#include <zzindicator.mq4>
+#include <../Libraries/libMTA/zzindicator.mq4>
 
-// #property indicator_separate_window
-// #property indicator_minimum    0
-// #property indicator_maximum    100
+#property indicator_chart_window
 
 //// must be declared directly in this file
 #property indicator_buffers 1
-// ^ set only the number of drawn indicators
+
 #property indicator_color1 clrYellow
-#property indicator_width1 2
+#property indicator_width1 1
 #property indicator_style1 STYLE_SOLID
 
 // #property indicator_level1     30.0

@@ -11,12 +11,13 @@
 
 extern const ENUM_PRICE_MODE zzwave_price_mode = PRICE_MODE_TYPICAL_OPEN; // Price mode for analysis
 
-#include <zzindicator.mq4>
+#include <../Libraries/libMTA/zzindicator.mq4>
+
+#property indicator_chart_window
 
 #property indicator_buffers 1
-// ^ set only the number of drawn indicators
 #property indicator_color1 clrMagenta
-#property indicator_width1 2
+#property indicator_width1 1
 #property indicator_style1 STYLE_DASH
 
 double ZZPriceLine[];  // price buffer (calculated)

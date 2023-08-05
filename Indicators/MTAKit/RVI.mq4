@@ -12,6 +12,9 @@
 
 #property indicator_separate_window
 
+#property indicator_minimum    -100
+#property indicator_maximum    100
+
 // RVI primary data
 #property indicator_color1 clrMediumBlue
 #property indicator_width1 1

@@ -11,8 +11,7 @@
 #property indicator_width1 1
 #property indicator_style1 STYLE_SOLID
 
-/// declared in project file ...
-// #property indicator_separate_window
+#property indicator_separate_window
 
 extern const int iatr_period = 14;                             // ATR EMA Period
 extern const int iatr_period_shift = 1;                        // EMA Period shift
