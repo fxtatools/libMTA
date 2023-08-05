@@ -35,7 +35,7 @@ enum ENUM_POINTER_TYPE
 ENUM_POINTER_TYPE CheckPointer(void *ptr){};
 
 /**
- * String Functions (FIXME)
+ * String Functions (FIXME C++ toolchain interation for editor tools)
  **/
 
 // #define StringFormat(s, ...) std::format(s, __VA_ARGS__)
@@ -71,6 +71,7 @@ int ArrayResize(void *array, int new_size, int reserve_size = 0);
 bool ArraySetAsSeries(const void *array, bool flag);
 int ArraySize(const void *array);
 void ArrayFree(void *array[]);
+
 /**
  * Time
  */
@@ -96,8 +97,21 @@ enum _TIME
     TIME_SECONDS = 4
 };
 
+struct MqlDateTime
+{
+    int year;        // year
+    int mon;         // month
+    int day;         // day
+    int hour;        // hour
+    int min;         // minutes
+    int sec;         // seconds
+    int day_of_week; // index of day of week (0 for Sunday)
+    int day_of_year; // index of day in year (0 for January 1)
+};
+
 string TimeToStr(datetime dt, int mode = TIME_DATE | TIME_MINUTES);
 string TimeToString(datetime dt, int mode = TIME_DATE | TIME_MINUTES);
+
 
 /**
  * Charts and Symbols
@@ -155,7 +169,23 @@ int CopyRates(
     datetime stop,
     MqlRates rates[]);
 
-int CopyTime(string symbol, int timeframe, int start, int count, datetime times[]);
+int CopyOpen(string symbol, int timeframe, int start, int count, double *open[]);
+int CopyHigh(string symbol, int timeframe, int start, int count, double *high[]);
+int CopyLow(string symbol, int timeframe, int start, int count, double *low[]);
+int CopyClose(string symbol, int timeframe, int start, int count, double *close[]);
+int CopyTime(string symbol, int timeframe, int start, int count, datetime *times[]);
+int CopyTickVolume(string symbol, int timeframe, int start, int count, datetime *times[]);
+
+double Open[];
+double High[];
+double Low[];
+double Close[];
+datetime Time[];
+
+const int Digits;
+
+double _Ask;
+double _Bid;
 
 /**
  * Graphical Objects
@@ -434,8 +464,16 @@ enum _ORDER_TYPE OrderType();
  * Mathematical Operations
  **/
 
-double MathAbs(double value);
+double fmod(double divident, double divisor);
+double fabs(double value);
 double ceil(double value);
+double floor(double value);
+double pow(double base, double exp);
+double sqrt(double value);
+double log(double value);
+double log10(double value);
+double fmin(double a, double b);
+double fmax(double a, double b);
 
 /**
  * Indicators
@@ -477,7 +515,6 @@ double iADX(string &symbol, int timeframe, int period, int applied_price, _ADX_M
  * MQL Programs
  */
 
-#define input(type, expr)
 
 enum _DEINIT_REASON
 {
@@ -490,7 +527,15 @@ enum _DEINIT_REASON
     REASON_TEMPLATE,
     REASON_INITFAILED,
     REASON_CLOSE
-}
+};
+
+enum ENUM_INIT_RETCODE
+{
+    INIT_SUCCEEDED,            // Initialization Succeeded
+    INIT_FAILED,               // Initialization Failed
+    INIT_PARAMETERS_INCORRECT, // Incorrect Paramters
+    INIT_AGENT_NOT_SUITABLE    // (Undocumented) EA failure
+};
 
 /**
  * Batch from contrib
@@ -500,10 +545,10 @@ enum _DEINIT_REASON
 #define COLOR_FORMAT_ARGB_RAW 0
 #define COLOR_FORMAT_XRGB_NOALPHA 0
 #define COLOR_FORMAT_ARGB_NORMALIZE 0
-#define INIT_FAILED 0
-#define INIT_SUCCEEDED 0
-#define INIT_AGENT_NOT_SUITABLE 0
-#define INIT_PARAMETERS_INCORRECT 0
+// #define INIT_FAILED 0
+// #define INIT_SUCCEEDED 0
+// #define INIT_AGENT_NOT_SUITABLE 0
+// #define INIT_PARAMETERS_INCORRECT 0
 #define __DATE__ 0
 #define __DATETIME__ 0
 #define __FILE__ 0
@@ -1837,15 +1882,15 @@ enum _DEINIT_REASON
 #define ColorToString() 0
 #define Comment() 0
 #define CopyBuffer() 0
-#define CopyClose() 0
-#define CopyHigh() 0
-#define CopyLow() 0
-#define CopyOpen() 0
+// #define CopyClose() 0
+// #define CopyHigh() 0
+// #define CopyLow() 0
+// #define CopyOpen() 0
 // #define CopyRates() 0
 #define CopyRealVolume() 0
 #define CopySpread() 0
 #define CopyTicks() 0
-#define CopyTickVolume() 0
+// #define CopyTickVolume() 0
 // #define CopyTime() 0
 #define cos() 0
 #define CryptDecode() 0
@@ -1860,7 +1905,7 @@ enum _DEINIT_REASON
 #define EventSetTimer() 0
 #define exp() 0
 #define ExpertRemove() 0
-#define fabs() 0
+// #define fabs() 0
 #define FileClose() 0
 #define FileCopy() 0
 #define FileDelete() 0
@@ -1895,10 +1940,10 @@ enum _DEINIT_REASON
 #define FileWriteLong() 0
 #define FileWriteString() 0
 #define FileWriteStruct() 0
-#define floor() 0
-#define fmax() 0
-#define fmin() 0
-#define fmod() 0
+// #define floor() 0
+// #define fmax() 0
+// #define fmin() 0
+// #define fmod() 0
 #define FolderClean() 0
 #define FolderCreate() 0
 #define FolderDelete() 0
@@ -1982,8 +2027,8 @@ enum _DEINIT_REASON
 #define iVIDyA() 0
 #define iVolumes() 0
 #define iWPR() 0
-#define log() 0
-#define log10() 0
+// #define log() 0
+// #define log10() 0
 #define MarketBookAdd() 0
 #define MarketBookGet() 0
 #define MarketBookRelease() 0
@@ -2056,7 +2101,7 @@ enum _DEINIT_REASON
 #define PositionSelect() 0
 #define PositionSelectByTicket() 0
 #define PositionsTotal() 0
-#define pow() 0
+// #define pow() 0
 // #define Print() 0
 // #define printf() 0
 // #define PrintFormat() 0
@@ -2088,7 +2133,7 @@ enum _DEINIT_REASON
 #define SignalUnsubscribe() 0
 #define sin() 0
 #define Sleep() 0
-#define sqrt() 0
+// #define sqrt() 0
 #define srand() 0
 #define StringAdd() 0
 #define StringBufferLen() 0

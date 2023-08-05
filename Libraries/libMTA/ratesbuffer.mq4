@@ -3,10 +3,47 @@
 #ifndef _RATESBUFFER_MQ4
 #define _RATESBUFFER_MQ4 1
 
+#property library
+#property strict
+
 #include "rates.mq4"
 #include "chartable.mq4"
 
-class RatesBuffer : public DataBuffer<MqlRates>
+
+template <typename T>
+class ObjectBuffer : public DataBuffer<T>
+{ // FIXME used singularly for ratesbuffer
+
+public:
+    ObjectBuffer(const int _extent = 0, const bool as_series = true) : DataBuffer(_extent, as_series){};
+
+    T get(const int idx)
+    {
+        // this assumes a value has been initialized at idx
+        return data[idx];
+    };
+
+    T getState()
+    {
+        return initial_state;
+    }
+
+    void set(const int idx, T &datum)
+    {
+        // this assumes the buffer's extent is already > idx
+        //
+        // method definition unusable for RatesBuffer
+        data[idx] = datum;
+    };
+
+    void setState(T &datum)
+    {
+        // method definition unusable for RatesBuffer
+        initial_state = datum;
+    }
+};
+
+class RatesBuffer : public ObjectBuffer<MqlRates>
 {
     // no multiple inheritance for C++-like classes defined in MQL.
     // This class stores a Chartable locally, rather than inheriting
@@ -16,7 +53,7 @@ protected:
     Chartable *chartInfo;
 
 public:
-    RatesBuffer(const int _extent = 0, const bool as_series = true, const string symbol = NULL, const int timeframe = EMPTY) : DataBuffer<MqlRates>(_extent, as_series)
+    RatesBuffer(const int _extent = 0, const bool as_series = true, const string symbol = NULL, const int timeframe = EMPTY) : ObjectBuffer<MqlRates>(_extent, as_series)
     {
         chartInfo = new Chartable(symbol == NULL ? _Symbol : symbol, timeframe == EMPTY ? _Period : timeframe);
     };
@@ -24,6 +61,16 @@ public:
     {
         FREEPTR(chartInfo);
     };
+
+    /// TBD b.c MQL is broken in nearly all of C++ pointer handling
+    void set(const int idx, const MqlRates &datum)
+    {
+        data[idx] = datum;
+    };
+
+    void setState(const MqlRates &datum) {
+        initial_state = datum;
+    }
 
     void setChartInfo(const string symbol = NULL, const int timeframe = EMPTY)
     {
@@ -173,6 +220,7 @@ public:
         // initial extent is 0, by default
         return primary_buffer.getRates(count, start);
     }
+
 };
 
 #endif

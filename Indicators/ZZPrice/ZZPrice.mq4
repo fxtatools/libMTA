@@ -17,7 +17,7 @@ extern const ENUM_PRICE_MODE zzwave_price_mode = PRICE_MODE_TYPICAL_OPEN; // Pri
 // ^ set only the number of drawn indicators
 #property indicator_color1 clrMagenta
 #property indicator_width1 2
-#property indicator_style1 STYLE_SOLID
+#property indicator_style1 STYLE_DASH
 
 double ZZPriceLine[];  // price buffer (calculated)
 double ZZPriceState[]; // extent state buffer

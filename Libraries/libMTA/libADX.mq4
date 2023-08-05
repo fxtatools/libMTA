@@ -5,53 +5,55 @@
 #include "libATR.mq4"
 #include "rates.mq4"
 #include "quotes.mq4"
+#include "trend.mq4" // crossover & binding for ADX
 
 #property library
+#property strict
 
-class ADXIter : public ATRIter
+class ADXIndicator : public ATRIndicator
 {
 
 protected:
-
-    ADXIter(const string _symbol, const int _timeframe, const string _name = "ADX++") : ATRIter(_symbol, _timeframe, _name, 6)
+    // a generalized constructor for application under ADXAvg,
+    // which uses no single EMA period
+    ADXIndicator(const int _price_mode,
+                 const string _symbol = NULL,
+                 const int _timeframe = EMPTY,
+                 const string _name = "ADX++") : ATRIndicator(_price_mode, _symbol, _timeframe, _name, 6)
     {
-        dx_buffer = atr_buffer.next();
+        initBuffers(atr_buffer);
+    };
+
+    void initBuffers(PriceBuffer &start_buff)
+    {
+        dx_buffer = start_buff.next();
         plus_dm_buffer = dx_buffer.next();
         minus_dm_buffer = plus_dm_buffer.next();
         plus_di_buffer = minus_dm_buffer.next();
         minus_di_buffer = plus_di_buffer.next();
     };
-
-    // the following objects will be initialized from values created
-    // & deinitialized under the BufferMgr protocol
-    PriceBuffer *dx_buffer;
-    PriceBuffer *plus_dm_buffer;
-    PriceBuffer *minus_dm_buffer;
-    PriceBuffer *plus_di_buffer;
-    PriceBuffer *minus_di_buffer;
 
 public:
     // Implementation Notes:
     // - designed for application onto MT4 time-series data
     // - higher period shift => indicator will generally be more responsive
-    //   to present market characteristics, even in event of a market rate spike
+    //   to present market characteristics, even in event of a market rate spike,
+    //   though likewise more erratic over durations
     // - period_shift should always be provided as < period
-    ADXIter(const int period,
-            const int period_shift = 1,
-            const int _price_mode = PRICE_CLOSE,
-            string _symbol = NULL,
-            int _timeframe = EMPTY,
-            const string _name = "ADX++",
-            const int _nr_buffers = 6) : ATRIter(period, period_shift,  _price_mode, false, _symbol, _timeframe, _name, _nr_buffers)
+    // - for a conventional EMA behavior, provide period_shift = 1
+    ADXIndicator(const int period,
+                 const int period_shift = 1,
+                 const int _price_mode = PRICE_CLOSE,
+                 const string _symbol = NULL,
+                 const int _timeframe = EMPTY,
+                 const string _name = "ADX++",
+                 const int _nr_buffers = 6,
+                 const int _data_shift = EMPTY) : ATRIndicator(period, period_shift, _price_mode, false, _symbol, _timeframe, _name, _data_shift, _nr_buffers)
     {
-        dx_buffer = atr_buffer.next();
-        plus_dm_buffer = dx_buffer.next();
-        minus_dm_buffer = plus_dm_buffer.next();
-        plus_di_buffer = minus_dm_buffer.next();
-        minus_di_buffer = plus_di_buffer.next();
+        initBuffers(atr_buffer);
     };
 
-    ~ADXIter()
+    ~ADXIndicator()
     {
         /// linked buffers will be deleted within the BufferMgr protocol
         dx_buffer = NULL;
@@ -59,6 +61,24 @@ public:
         minus_dm_buffer = NULL;
         plus_di_buffer = NULL;
         minus_di_buffer = NULL;
+    };
+
+    // the following objects will be initialized from values created
+    // & deinitialized under the BufferMgr protocol
+    //
+    // declared as public for purpose of simple direct access under ADXAvg
+    //  FIXME -> bindDxBuffer(const int offset, label = NULL) ...
+    PriceBuffer *dx_buffer;
+    PriceBuffer *plus_dm_buffer;
+    PriceBuffer *minus_dm_buffer;
+    PriceBuffer *plus_di_buffer;
+    PriceBuffer *minus_di_buffer;
+
+    virtual int dataBufferCount() const
+    {
+        // return the number of buffers used directly for this indicator.
+        // should be incremented internally, in derived classes
+        return ATRIndicator::dataBufferCount() + 5;
     };
 
     virtual string indicator_name() const
@@ -70,28 +90,64 @@ public:
     // public buffer state accessors for ADXAvgIter
     //
 
-    double atr_price_state() {
+    double atrState()
+    {
         return atr_buffer.getState();
     };
 
-    double dx_state() {
+    double atrAt(const int idx)
+    {
+        return atr_buffer.get(idx);
+    }
+
+    double dxState()
+    {
         return dx_buffer.getState();
     };
 
-    double plus_dm_state() {
+    double dxAt(const int idx)
+    {
+        return dx_buffer.get(idx);
+    };
+
+    double plusDmState()
+    {
         return plus_dm_buffer.getState();
     };
 
-    double minus_dm_state() {
+    double plusDmAt(const int idx)
+    {
+        return plus_dm_buffer.get(idx);
+    };
+
+    double minusDmState()
+    {
         return minus_dm_buffer.getState();
     };
 
-    double plus_di_state() {
+    double minusDmAt(const int idx)
+    {
+        return minus_dm_buffer.get(idx);
+    };
+
+    double plusDiState()
+    {
         return plus_di_buffer.getState();
     };
 
-    double minus_di_state() {
+    double plusDiAt(const int idx)
+    {
+        return plus_di_buffer.get(idx);
+    };
+
+    double minusDiState()
+    {
         return minus_di_buffer.getState();
+    };
+
+    double minusDiAt(const int idx)
+    {
+        return minus_di_buffer.get(idx);
     };
 
     // Calculate the +DI directional movement at a given index, using the time-series
@@ -111,6 +167,12 @@ public:
     {
         return low[idx + 1] - low[idx];
     };
+    
+    double chg(const int idx, const double &open[], const double &high[], const double &low[], const double &close[]) {
+        const double p_near = price_for(idx, price_mode, open, high, low, close);
+        const double p_far = price_for(idx, price_mode, open, high, low, close);
+        return p_near - p_far;
+    }
 
     // calculate the non-EMA ADX DX, +DI and -DI at a provided index, using time-series
     // high, low, and close data
@@ -119,65 +181,117 @@ public:
     // externally
     //
     // Fields of adxq will be initialized for ATR, DX, +DI and -DI values, without DX EMA
-    virtual void calcDx(const int idx, const double &open[], const double &high[], const double &low[], const double &close[])
+    virtual void calcDx(const int idx, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
     {
-        // update ATR to current
-        ATRIter::calcMain(idx, open, high, low, close);
+        // update ATR to current, from previously initialized ATR
+        DEBUG(indicator_name() + " Previous ATR at calcDx [%d] %s : %f", idx, offset_time_str(idx), atr_buffer.getState());
+        ATRIndicator::calcMain(idx, open, high, low, close, volume);
         double atr_cur = atr_buffer.getState();
+        // ^ FIXME something about the ATR calculation at [0] is breaking now in ADXAvg
 
         double sm_plus_dm = __dblzero__;
         double sm_minus_dm = __dblzero__;
 
         const double ema_period_dbl = (double)ema_period;
-        double plus_dm_wt = __dblzero__;
-        double minus_dm_wt = __dblzero__;
+        double weights = __dblzero__;
 
         DEBUG(indicator_name() + " ATR at calcDx [%d] %s : %f", idx, offset_time_str(idx), atr_cur);
 
         if (dblZero(atr_cur))
         {
             printf(indicator_name() + " zero initial ATR [%d] %s", idx, offset_time_str(idx));
+            // FIXME error
             return;
         }
         else if (atr_cur < 0)
         {
             printf(indicator_name() + " negative ATR [%d] %s", idx, offset_time_str(idx));
+            // FIXME error
             return;
         }
 
-        for (int offset = idx + ema_period, p_k = 1; offset >= idx; offset--, p_k++)
+        // Partial/Modified Hull MA for DM
+        // https://alanhull.com/hull-moving-average
+        // simplified
+        // https://school.stockcharts.com/doku.php?id=technical_indicators:hull_moving_average
+        // - modified as in using the period shift in lieu of both the 2 * short factor
+        //   and (TO DO) as the period for the prevailing MA
+        // - this uses one iteration for calculating both the short and primary MA
+        // - as yet, no additional MA over the sum of short and primary
+        //
+        /// period for the prevailing MA
+        // const int p_sqrt = ema_shift; // (int)sqrt(ema_period);
+        ///
+        const int p_short = ema_shift; // (int)(ema_period/2);
+        double weights_short = DBLZERO;
+        double sm_plus_short = DBLZERO;
+        double sm_minus_short = DBLZERO;
+
+        // - using volume as a weighting factor for +DM/-DM mWMA [!]
+        for (int offset = idx + ema_period - 1, p_k = 1; offset >= idx; offset--, p_k++)
         {
             const double mov_plus = plusDm(offset, high, low);
             const double mov_minus = minusDm(offset, high, low);
-            const double wfactor = (double)p_k / ema_period_dbl; // mWMA
+            // const double wfactor = ((double)p_k * volume[idx]) / ema_period_dbl; // mWMA feat. volume
+            // const double wfactor = ((double)p_k / volume[idx]) / ema_period_dbl ; // mWMA feat. volume++
+            // ? 
+            const double wfactor = ((double)p_k ) / (ema_period_dbl * volume[idx]) ; // mWMA feat. volume+++
+
+
+            // const double wfactor = (double)p_k / ema_period_dbl; // mWMA
+
+            // const double wfactor = 1.0; // AVG
+
+            DEBUG("+DM %d %f", offset, mov_plus);
+            DEBUG("-DM %d %f", offset, mov_minus);
 
             if (mov_plus > 0 && mov_plus > mov_minus)
             {
                 // sm_plus_dm += mov_plus;
                 // plus_dm_wt += 1.0;
-                sm_plus_dm += (mov_plus * wfactor); // mWMA
-                // plus_dm_wt += wfactor;
+                const double plus = (mov_plus * wfactor); // mWMA
+                sm_plus_dm += plus;
+                /*
+                if (p_k >= p_short)
+                    sm_plus_short += plus; // Partial Hull MA
+                */
             }
             else if (mov_minus > 0 && mov_minus > mov_plus)
             {
                 // sm_minus_dm += mov_minus;
                 // minus_dm_wt += 1.0;
-                sm_minus_dm += (mov_minus * wfactor); /// mWMA
-                // minus_dm_wt += wfactor;
+                const double minus = (mov_minus * wfactor); /// mWMA
+                sm_minus_dm += minus;
+                /*
+                if (p_k >= p_short)
+                    sm_minus_short += minus; // Partial Hull MA
+                */
             }
-            // plus_dm_wt += 1.0;
-            // minus_dm_wt += 1.0;
-
-            plus_dm_wt += wfactor;
-            minus_dm_wt += wfactor;
+            weights += wfactor;
+            if (p_k > p_short)
+                weights_short += wfactor;
         }
 
-        /// mWMA - TBD
-        if (!dblZero(plus_dm_wt))
-            sm_plus_dm /= plus_dm_wt;
-        if (!dblZero(minus_dm_wt))
-            sm_minus_dm /= minus_dm_wt;
+        /// Parital Hull MA
+        // sm_plus_short /= weights_short;
+        // sm_minus_short /= weights_short;
 
+        /// mWMA - TBD
+        sm_plus_dm /= weights;
+        sm_minus_dm /= weights;
+
+        //// Partial HMA TBD
+        //// NB: This alone may result in negative values
+        // --
+        // sm_plus_dm = (2 * sm_plus_short) - sm_plus_dm;
+        /// ++ but ...
+        // sm_plus_dm = (ema_shift * sm_plus_short) - sm_plus_dm;
+        // --
+        // sm_minus_dm = (2 * sm_minus_short) - sm_minus_dm;
+        /// ++ but ...
+        // sm_minus_dm = (ema_shift * sm_minus_short) - sm_minus_dm;
+
+        /// non-MA ..
         // sm_plus_dm = plusDm(idx, high, low);
         // sm_minus_dm = minusDm(idx, high, low);
 
@@ -201,7 +315,7 @@ public:
         */
 
         /// alternately: DM for DI as forward-shifted EMA of the current weighted MA of +DM / -DM
-        /*
+        /* - smoothed but not necc. useful as an indicator
         const double ema_shifted_dbl = (double)ema_shifted_period;
         const double ema_shift_dbl = (double)ema_shift;
         if (plus_dm_prev != DBL_MIN)
@@ -209,21 +323,39 @@ public:
         if (minus_dm_prev != DBL_MIN)
             sm_minus_dm = ((minus_dm_prev * ema_shifted_dbl) + (sm_minus_dm * ema_shift_dbl)) / ema_period_dbl;
         */
-       /// or: standard ema (forward-shift unused here)
-       if (plus_dm_prev != DBL_MIN)
+
+        /// or: standard ema (forward-shift unused here)
+        
+        if (plus_dm_prev != DBL_MIN)
             sm_plus_dm = ema(plus_dm_prev, sm_plus_dm, ema_period);
         if (minus_dm_prev != DBL_MIN)
             sm_minus_dm = ema(minus_dm_prev, sm_minus_dm, ema_period);
+        
+        // or RVI-like WMA
+        /*
+        if (plus_dm_prev != DBL_MIN)
+            sm_plus_dm = (2.0 * plus_dm_prev + (sm_plus_dm)) / 3.0;
+        if (minus_dm_prev != DBL_MIN)
+            sm_minus_dm = (2.0 * minus_dm_prev + (sm_minus_dm)) / 3.0;
+        */
+        // ... similarly, RVI-like WMA using input parameters (??)
+        
+        /*
+        if (plus_dm_prev != DBL_MIN)
+            sm_plus_dm = ((ema_shift * plus_dm_prev) + (sm_plus_dm * ema_shifted_period)) / ema_period_dbl;
+        if (minus_dm_prev != DBL_MIN)
+            sm_minus_dm = ((ema_shift * minus_dm_prev) + (sm_minus_dm * ema_shifted_period)) / ema_period_dbl;
+        */
+
         plus_dm_buffer.setState(sm_plus_dm);
         minus_dm_buffer.setState(sm_minus_dm);
-
 
         /* */
         /// alternately: just use DM within period
 
         //// conventional plus_di / minus_di
         const double plus_di = (sm_plus_dm / atr_cur) * 100.0;
-        const double minus_di = (sm_minus_dm / atr_cur)  * 100.0;
+        const double minus_di = (sm_minus_dm / atr_cur) * 100.0;
         //
         //// not used anywhere in reference for common ADX +DI/-DI calculation,
         //// this reliably converts it to a percentage however.
@@ -248,7 +380,7 @@ public:
             // const double dx = fabs((plus_di - minus_di) / di_sum) * 100.0;
             /// alternately, a down-scaled representation for DX factored from DI:
             const double dx = 100.0 - (100.0 / (1.0 + fabs((plus_di - minus_di) / di_sum)));
-            DEBUG(indicator_name() + "DX [%d] %s : %s", idx, offset_time_str(idx), dx);
+            DEBUG(indicator_name() + " DX [%d] %s : %f", idx, offset_time_str(idx), dx);
             dx_buffer.setState(dx);
         }
     };
@@ -262,44 +394,35 @@ public:
     // calculation.
     //
     // This method will not produce an EMA for the initial DX value
-    virtual int calcInitial(const int extent, const double &open[], const double &high[], const double &low[], const double &close[])
+    virtual int calcInitial(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
     {
-        int calc_idx = ATRIter::calcInitial(extent, open, high, low, close);
-        double next_atr = atr_buffer.getState();
+        int calc_idx = ATRIndicator::calcInitial(_extent, open, high, low, close, volume);
+        double atr_cur = atr_buffer.getState();
 
-        if (next_atr == 0)
+        if (atr_cur == 0)
         {
             Alert(indicator_name() + " Initial ATR calculation failed => 0");
             return EMPTY;
         }
 
-        DEBUG(indicator_name() + " Initial ATR at %s [%d] %f", offset_time_str(calc_idx), calc_idx, next_atr);
+        DEBUG(indicator_name() + " Initial ATR at %s [%d] %f", offset_time_str(calc_idx), calc_idx, atr_cur);
 
         // pad by one for the initial ATR
         calc_idx--;
 
-        // pad by one more and update ATR for the gap, to allow for +DM/-DM calculation
-        // at start of first EMA_PERIOD (or not)
-        //
-        /*
-        ATRIter::calcMain(calc_idx--, open, high, low, close);
-        next_atr = debug ? atr_buffer.getState() : EMPTY; // now unused when not debug
-        DEBUG(indicator_name() + " Second ATR at %s [%d] %f", offset_time_str(calc_idx), calc_idx, next_atr);
-        */
-
         plus_dm_buffer.setState(DBL_MIN);
         minus_dm_buffer.setState(DBL_MIN);
-        calcDx(calc_idx, open, high, low, close);
+        calcDx(calc_idx, open, high, low, close, volume);
         return calc_idx;
     }
 
     // ADX calculation, as a function onto DX
-    virtual void calcMain(const int idx, const double &open[], const double &high[], const double &low[], const double &close[])
+    virtual void calcMain(const int idx, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
     {
         /// store previous DX
         const double adx_pre = dx_buffer.getState();
         /// calculte current DX, to be stored by side effect along with +DM/+DM, +DI/-DI
-        calcDx(idx, open, high, low, close);
+        calcDx(idx, open, high, low, close, volume);
         /// ADX
         const double dx_cur = dx_buffer.getState();
         /// forward-shifted EMA
@@ -312,6 +435,8 @@ public:
 
     virtual void initIndicator()
     {
+        PriceIndicator::initIndicator();
+
         // bind all drawn and undrawn buffers to the indicator
         SetIndexBuffer(0, plus_di_buffer.data);
         SetIndexLabel(0, "+DI");
@@ -327,6 +452,7 @@ public:
 
         // non-drawn buffers
         const bool draw_atr = debug;
+        // const bool draw_atr = true;
         SetIndexBuffer(3, atr_buffer.data, draw_atr ? INDICATOR_DATA : INDICATOR_CALCULATIONS);
         SetIndexLabel(3, draw_atr ? "DX ATR" : NULL);
         SetIndexStyle(3, draw_atr ? DRAW_LINE : DRAW_NONE);
@@ -340,46 +466,105 @@ public:
         SetIndexStyle(5, DRAW_NONE);
     };
 
-};
-
-double max(const double &values[]) {
-    double m = __dblzero__;
-    for(int n = 0; n < ArraySize(values); n++) {
-        const double val = values[n];
-        if (val > m) {
-            m = val;
+    virtual bool bind(PriceXOver &xover, const int start = 0, const int end = EMPTY)
+    {
+        const bool found = xover.bind(plus_di_buffer.data, minus_di_buffer.data, this, start, end);
+        if (found)
+        {
+            // further +DI > further -DI
+            xover.setBearish(xover.farVal() > xover.farValB());
+            return true;
+        }
+        else
+        {
+            return false;
         }
     }
-    return m;
-}
 
-class ADXAvgBuffer : public ADXIter
+    double xoverNearPlusDI(PriceXOver &xover)
+    {
+        return xover.nearVal();
+    }
+    double xoverNearMinusDI(PriceXOver &xover)
+    {
+        return xover.nearValB();
+    }
+
+    double xoverFarPlusDI(PriceXOver &xover)
+    {
+        return xover.farVal();
+    }
+
+    double xoverFarMinusDI(PriceXOver &xover)
+    {
+        return xover.farValB();
+    }
+};
+
+class ADXAvg : public ADXIndicator
 {
 protected:
-    ADXIter *m_iter[];
+    ADXIndicator *m_iter[];
     double m_weights[];
 
-public:
-    int n_adx_members;
+    // FIXME absent of convnetion for passing a flag indicating "Draw no buffers",
+    // this has not been initializing all member data buffers as indicator
+    // buffers under initIndicator()
+    //
+    // This initalizes only the buffers used for capturing average data from
+    // member indicators.
+    //
+    // The rest of the buffers should be succesfully managed under
+    // BufferMgr. This is being tested locally.
 
-    double total_weights;
-    int longest_period;
-
-    ADXAvgBuffer(const int n_members, const int &periods[], const int &period_shifts[], const double &weights[], const string _symbol = NULL, const int _timeframe = EMPTY) : n_adx_members(n_members), ADXIter(_symbol, _timeframe, "ADXAvg")
+    int max(const int n_val, const int &values[])
     {
+        int m = 0;
+        for (int n = 0; n < n_val; n++)
+        {
+            const int v = values[n];
+            if (v > m)
+                m = v;
+        }
+        return m;
+    }
 
-        ArrayResize(m_iter, n_adx_members);
-        ArrayResize(m_weights, n_adx_members);
+    double sum(const int n_val, const double &values[])
+    {
+        double m = DBLZERO;
+        for (int n = 0; n < n_val; n++)
+        {
+            m += values[n];
+        }
+        return m;
+    }
+
+public:
+    const int n_adx_members;
+
+    const double total_weights;
+    const int longest_period;
+
+    ADXAvg(const int n_members,
+           const int &periods[],
+           const int &period_shifts[],
+           const double &weights[],
+           const int _price_mode = PRICE_CLOSE,
+           const string _symbol = NULL,
+           const int _timeframe = EMPTY,
+           const string _name = "ADXvg") : n_adx_members(n_members), total_weights(sum(n_members, weights)), longest_period(max(n_members, periods)), ADXIndicator(_price_mode, _symbol, _timeframe, _name)
+
+    {
+        ArrayResize(m_iter, n_members);
+        ArrayResize(m_weights, n_members);
         int add_idx;
         int last_per = 0;
-        int longest_per = 0;
         for (int idx = 0; idx < n_members; idx++)
         {
             const int per = periods[idx];
             const int shift = period_shifts[idx];
             const double weight = weights[idx];
-            total_weights += weight;
-            if (per > last_per)
+            if (last_per != 0 && per > last_per)
             {
                 for (int n = idx; n > 0; n--)
                 {
@@ -389,26 +574,21 @@ public:
                     m_weights[n] = m_weights[nminus];
                 }
                 add_idx = 0;
-                if (per > longest_per)
-                {
-                    longest_per = per;
-                }
             }
             else
             {
                 add_idx = idx;
             }
-            m_iter[add_idx] = new ADXIter(per, shift, price_mode, _symbol, _timeframe);
+            m_iter[add_idx] = new ADXIndicator(per, shift, price_mode, _symbol, _timeframe);
             m_weights[add_idx] = weight;
             last_per = per;
         }
-        longest_period = longest_per;
     }
-    ~ADXAvgBuffer()
+    ~ADXAvg()
     {
         for (int n = 0; n < n_adx_members; n++)
         {
-            ADXIter *it = m_iter[n];
+            ADXIndicator *it = m_iter[n];
             m_iter[n] = NULL;
             delete it;
         }
@@ -416,8 +596,53 @@ public:
         ArrayFree(m_weights);
     }
 
+    virtual void initIndicator()
+    {
+        // ensure all local buffers and all member buffers will be
+        // registered as indicator buffers
+        //
+        // if not called for all member buffers, there would be side
+        // effects towards calculations during indicator update,
+        // presumably as an effect of a behavior of pointer shift
+        // performed within the MT4 implementation, for indicator
+        // data.
+        //
+        ADXIndicator::initIndicator();
+        const int count = dataBufferCount();
+        IndicatorBuffers(count * (1 + n_adx_members));
+        int next_offset = count;
+        for (int n = 0; n < n_adx_members; n++)
+        {
+            ADXIndicator *it = m_iter[n];
+            // bind ADX member buffers as undrawn
+            SetIndexBuffer(next_offset, it.plus_di_buffer.data, INDICATOR_CALCULATIONS);
+            SetIndexLabel(next_offset, NULL);
+            SetIndexStyle(next_offset++, DRAW_NONE);
+
+            SetIndexBuffer(next_offset, it.minus_di_buffer.data, INDICATOR_CALCULATIONS);
+            SetIndexLabel(next_offset, NULL);
+            SetIndexStyle(next_offset++, DRAW_NONE);
+
+            SetIndexBuffer(next_offset, it.dx_buffer.data, INDICATOR_CALCULATIONS);
+            SetIndexLabel(next_offset, NULL);
+            SetIndexStyle(next_offset++, DRAW_NONE);
+
+            SetIndexBuffer(next_offset, it.atr_buffer.data, INDICATOR_CALCULATIONS);
+            SetIndexLabel(next_offset, NULL);
+            SetIndexStyle(next_offset++, DRAW_NONE);
+
+            SetIndexBuffer(next_offset, it.plus_dm_buffer.data, INDICATOR_CALCULATIONS);
+            SetIndexLabel(next_offset, NULL);
+            SetIndexStyle(next_offset++, DRAW_NONE);
+
+            SetIndexBuffer(next_offset, it.minus_dm_buffer.data, INDICATOR_CALCULATIONS);
+            SetIndexLabel(next_offset, NULL);
+            SetIndexStyle(next_offset++, DRAW_NONE);
+        }
+    }
+
     // copy elements of the m_iter array to some provided buffer
-    int copyIter(ADXIter *&buffer[])
+    int copyIter(ADXIndicator *&buffer[])
     {
         if (ArrayIsDynamic(buffer) && ArraySize(buffer) < n_adx_members)
             ArrayResize(buffer, n_adx_members);
@@ -440,39 +665,60 @@ public:
         return n_adx_members;
     };
 
-    virtual bool setExtent(const int len, const int padding = EMPTY) {
+    virtual bool setExtent(const int len, const int padding = EMPTY)
+    {
         if (!PriceIndicator::setExtent(len, padding))
             return false;
         for (int n = 0; n < n_adx_members; n++)
         {
-            ADXIter *it = m_iter[n];
+            ADXIndicator *it = m_iter[n];
             if (!it.setExtent(len, padding))
                 return false;
         }
         return true;
     }
 
-    virtual bool reduceExtent(const int len, const int padding = EMPTY) {
+    virtual bool reduceExtent(const int len, const int padding = EMPTY)
+    {
         if (!PriceIndicator::reduceExtent(len, padding))
             return false;
         for (int n = 0; n < n_adx_members; n++)
         {
-            ADXIter *it = m_iter[n];
+            ADXIndicator *it = m_iter[n];
             if (!it.reduceExtent(len, padding))
                 return false;
         }
         return true;
     }
 
-
-    virtual void calcDx(const int idx, const double &open[], const double &high[], const double &low[], const double &close[])  {
-    // NOP
+    virtual void calcDx(const int idx, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[]){
+        // N/A. The DX here is calculated from a weighted average of member ADX series
     };
 
-    virtual int calcInitial(const int extent, const double &open[], const double &high[], const double &low[], const double &close[])
+    virtual void restoreState(const int idx)
+    {
+        for (int n = 0; n < n_adx_members; n++)
+        {
+            ADXIndicator *it = m_iter[n];
+            it.restoreState(idx);
+        }
+    };
+
+    virtual datetime updateVars(const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[], const int initial_index = EMPTY, const int padding = EMPTY)
+    {
+        for (int n = 0; n < n_adx_members; n++)
+        {
+            ADXIndicator *it = m_iter[n];
+            // dispatch to restoreState(), calcMain(), and storeState() for each
+            it.updateVars(open, high, low, close, volume, initial_index, padding);
+        }
+        return ADXIndicator::updateVars(open, high, low, close, volume, initial_index, padding);
+    }
+
+    virtual int calcInitial(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
     {
 
-        DEBUG("Calculating Initial Avg ADX wtihin %d", extent);
+        DEBUG("Calculating Initial Avg ADX wtihin %d", _extent);
 
         int first_idx = -1;
         int next_idx;
@@ -484,36 +730,36 @@ public:
         double avg_minus_di = __dblzero__;
         for (int n = 0; n < n_adx_members; n++)
         {
-            ADXIter *it = m_iter[n];
+            ADXIndicator *it = m_iter[n];
             const double weight = m_weights[n];
             if (first_idx == -1)
             {
                 // the ADX for the furthest EMA period will be calculated first
-                DEBUG("Calculate first ADX(%d, %d) [%d]", it.ema_period, it.ema_shift, extent);
-                first_idx = it.calcInitial(extent, open, high, low, close);
+                DEBUG("Calculating first ADX(%d, %d) [%d]", it.ema_period, it.ema_shift, _extent);
+                first_idx = it.calcInitial(_extent, open, high, low, close, volume);
+                it.storeState(first_idx);
                 DEBUG("First index %d", first_idx);
             }
             else
             {
-                DEBUG("Calculate secondary ADX(%d, %d) [%d]", it.ema_period, it.ema_shift, next_idx);
-                next_idx = it.calcInitial(extent, open, high, low, close);
+                DEBUG("Calculating secondary ADX(%d, %d) [%d]", it.ema_period, it.ema_shift, next_idx);
+                next_idx = it.calcInitial(_extent, open, high, low, close, volume);
                 for (int idx = next_idx - 1; idx >= first_idx; idx--)
                 {
-                   // fast-forward to the start for the ADX with furthest EMA period
-                   DEBUG("Fast-forward for ADX(%d, %d) [%d]", it.ema_period, it.ema_shift, idx);
-                   it.calcMain(idx, open, high, low, close);
+                    // fast-forward to the start for the ADX with furthest EMA period
+                    DEBUG("Fast-forward for ADX(%d, %d) [%d]", it.ema_period, it.ema_shift, idx);
+                    it.calcMain(idx, open, high, low, close, volume);
                 }
-               /// shortcut ...
-               // it.calcInitial(first_idx, open, high, low, close);
+                it.storeState(first_idx);
             }
-            avg_atr += (it.atr_price_state() * weight);
-            avg_dx += (it.dx_state() * weight);
-            avg_plus_dm += (it.plus_dm_state() * weight);
-            avg_minus_dm += (it.minus_dm_state() * weight);
-            avg_plus_di += (it.plus_di_state() * weight);
-            avg_minus_di += (it.minus_di_state() * weight);
+            avg_atr += (it.atrState() * weight);
+            avg_dx += (it.dxState() * weight);
+            avg_plus_dm += (it.plusDmState() * weight);
+            avg_minus_dm += (it.minusDmState() * weight);
+            avg_plus_di += (it.plusDiState() * weight);
+            avg_minus_di += (it.minusDiState() * weight);
         }
-        fillState(extent - 1, first_idx + 1);
+        fillState(_extent - 1, first_idx + 1);
         avg_atr /= total_weights;
         avg_dx /= total_weights;
         avg_plus_dm /= total_weights;
@@ -529,7 +775,7 @@ public:
         return first_idx;
     };
 
-    virtual void calcMain(const int idx, const double &open[], const double &high[], const double &low[], const double &close[])
+    virtual void calcMain(const int idx, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
     {
         DEBUG("Binding Avg ADX EMA %d", idx);
         double avg_atr = __dblzero__;
@@ -540,15 +786,16 @@ public:
         double avg_minus_di = __dblzero__;
         for (int n = 0; n < n_adx_members; n++)
         {
-            ADXIter *it = m_iter[n];
+            ADXIndicator *it = m_iter[n];
             double weight = m_weights[n];
-            it.calcMain(idx, open, high, low, close);
-            avg_atr += (it.atr_price_state() * weight);
-            avg_dx += (it.dx_state() * weight);
-            avg_plus_dm += (it.plus_dm_state() * weight);
-            avg_minus_dm += (it.minus_dm_state() * weight);
-            avg_plus_di += (it.plus_di_state() * weight);
-            avg_minus_di += (it.minus_di_state() * weight);
+            /// not re-running calculations here.
+            // Retrieving values calculated from it.updateVars()
+            avg_atr += (it.atrAt(idx) * weight);
+            avg_dx += (it.dxAt(idx) * weight);
+            avg_plus_dm += (it.plusDmAt(idx) * weight);
+            avg_minus_dm += (it.minusDmAt(idx) * weight);
+            avg_plus_di += (it.plusDiAt(idx) * weight);
+            avg_minus_di += (it.minusDiAt(idx) * weight);
         }
         avg_atr /= total_weights;
         avg_dx /= total_weights;
@@ -566,4 +813,3 @@ public:
 };
 
 #endif
-

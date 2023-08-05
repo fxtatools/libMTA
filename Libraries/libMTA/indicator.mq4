@@ -7,21 +7,31 @@
 #include <pricemode.mq4>
 
 #property library
+#property strict
 
-// initial prototype for a generalized, abstract base class for price-oriented indicators
+// generalized abstract base class for technical indicators
 class PriceIndicator : public Chartable
 {
 protected:
     const string name;
     const int nr_buffers;
-    PriceMgr *price_mgr; // should be defined in the protected section, except for testing
+    PriceMgr *price_mgr;
+    const int data_shift;
 
 public:
     datetime latest_quote_dt;
 
-    PriceIndicator(const string _symbol, const int _timeframe, const string _name, const int _nr_buffers = 1) : name(_name), latest_quote_dt(0), nr_buffers(_nr_buffers), Chartable(_symbol, _timeframe)
+    PriceIndicator(const string _name,
+                   const int _nr_buffers,
+                   const string _symbol = NULL,
+                   const int _timeframe = EMPTY,
+                   const int _data_shift = 1) : name(_name),
+                                                latest_quote_dt(0),
+                                                nr_buffers(_nr_buffers),
+                                                data_shift(_data_shift),
+                                                Chartable(_symbol, _timeframe)
     {
-        const int linked_buffers = nr_buffers - 1;
+        const int linked_buffers = _nr_buffers - 1;
         if (linked_buffers >= 0)
         {
             price_mgr = new PriceMgr(0, true, linked_buffers);
@@ -36,71 +46,104 @@ public:
         FREEPTR(price_mgr);
     }
 
-    virtual int nDataBuffers() const
+    // return the number of buffers used directly for this indicator.
+    //
+    // This value should be incremented internally, in classes
+    // derived from an indicator implementation
+    virtual int dataBufferCount() const
     {
-        // return the number of buffers used directly for this indicator.
-        // should be incremented internally, in derived classes
         return nr_buffers;
     };
 
-    virtual string indicator_name() const
+    // return the number of quotes processed by this indicator
+    virtual int getRatesCount() const
+    {
+        return price_mgr.extent;
+    };
+
+    // return the indicator's display name
+    virtual string indicatorName() const
     {
         return name;
-    }
+    };
 
-    virtual int latest_quote_offset()
+    // return the current chart shift of the latest quote
+    // processed by the indicator
+    virtual int latestQuoteShift()
     {
         return iBarShift(symbol, timeframe, latest_quote_dt);
-    }
+    };
 
+    // Default implementation: Set the extent of all linked
+    // buffers to the provided length, with optional padding,
+    // by way of the indicator's price manager.
     virtual bool setExtent(const int len, const int padding = EMPTY)
     {
         return price_mgr.setExtent(len, padding);
     };
 
+    // Default implementation: Reduce the extent of all linked
+    // buffers to the provided length, with optional padding,
+    // by way of the indicator's price manager.
     virtual bool reduceExtent(const int len, const int padding = EMPTY)
     {
         return price_mgr.reduceExtent(len, padding);
     };
 
-    virtual int indicatorUpdateOffset(const int idx, const double &open[], const double &high[], const double &low[], const double &close[])
+    // utility method - return the number of chart quotes used
+    // internally for the indicator
+    virtual int dataShift()
     {
-        // initial support for backtracking during indicator update
-        //
-        // default behavior: Backtrack to the index previous to the last calculated
-        return idx + 1;
+        return data_shift;
+    }
+
+    // return the number of chart quotes required for indicator update
+    // to the provided index
+    virtual int indicatorUpdateShift(const int idx)
+    {
+        return dataShift() + 1;
     };
 
-    // calculate variables for the indicator and set state in all buffers used by this indicator
-    virtual void calcMain(const int idx, const double &open[], const double &high[], const double &low[], const double &close[]) = 0;
-
-    // initialize variables used by this indicator, and return the offset for subsequent calculation
-    virtual int calcInitial(const int extent, const double &open[], const double &high[], const double &low[], const double &close[]) = 0;
-
+    // Default implementation: For each buffer linked to the
+    // primary, transfer any value from the buffer's state
+    // variable to the provided index in the buffer's data
+    // array.
+    //
+    // For any value equal to EMPTY_VALUE, the value
+    // will be transferred equivalently to the buffer's
+    // data array
     virtual void storeState(const int idx)
     {
         PriceBuffer *buffer = price_mgr.primary_buffer;
         for (int n = 0; n < nr_buffers; n++)
         {
             const double state = buffer.getState();
-            // FIXME ATR++ impl needs optional price=>points conversion here
             buffer.data[idx] = state;
             buffer = buffer.next();
         }
     };
 
+    // Default implementation: For each buffer linked to the
+    // primary, transfer a value from the buffer's data array
+    // at the provided index, storing the value in the buffer's
+    // state variable
+    //
+    // For any value equal to EMPTY_VALUE, the value
+    // will be transferred equivalently from the buffer's
+    // data array
     virtual void restoreState(const int idx)
     {
         PriceBuffer *buffer = price_mgr.primary_buffer;
         for (int n = 0; n < nr_buffers; n++)
         {
             const double state = buffer.data[idx];
-            // FIXME ATR++ impl needs optional points=>price conversion here
             buffer.setState(state);
             buffer = buffer.next();
         }
     };
 
+    // utility method: Set the provided value into a range
+    // within the buffer's data array.
     virtual void fillState(const int start, const int end, const double value = EMPTY_VALUE)
     {
         for (int idx = end; idx >= start; idx--)
@@ -109,15 +152,40 @@ public:
             for (int n = 0; n < nr_buffers; n++)
             {
                 const double state = buffer.getState();
-                // FIXME ATR++ impl needs optional price=>points conversion here
                 buffer.set(idx, value);
                 buffer = buffer.next();
             }
         }
     };
 
-    // run calcMain and transfer calculation state into data buffers
-    virtual datetime updateVars(const double &open[], const double &high[], const double &low[], const double &close[], const int initial_index = EMPTY, const int padding = EMPTY)
+    // Initialize any indicator display for this indicator implementation
+    //
+    // Default implementation:
+    // - set the indicator name
+    // - set the indicator's display accuracy in digits to match that
+    //   of the selected market symbol
+    // - set the number of indicator buffers to the value returned
+    //   by the indicator's dataBufferCount() method
+    virtual void initIndicator()
+    {
+        IndicatorShortName(indicatorName());
+        IndicatorDigits(market_digits);
+        IndicatorBuffers(dataBufferCount());
+    };
+
+    // calculate any variables for the indicator at the provided
+    // data index, and set local state to all buffers used by this
+    // indicator
+    virtual void calcMain(const int idx, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[]) = 0;
+
+    // initialize data buffers and local state for variables used
+    // by this indicator, and return the offset for subsequent
+    // calculation by calcMain()
+    virtual int calcInitial(const int extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[]) = 0;
+
+    // run calcMain() and transfer calculation state into each
+    // buffer's data arrays
+    virtual datetime updateVars(const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[], const int initial_index = EMPTY, const int padding = EMPTY)
     {
         // initial_index is used here for purpose of applying this for indicator initialization,
         // there using the index returned by calcInitial()
@@ -125,56 +193,56 @@ public:
         const int __latest__ = 0;
 
         // some indicators will need to backtrack here
-        // thus the implementation of indicatorUpdateOffset()
-        const int update_idx = initial_index == EMPTY ? indicatorUpdateOffset(latest_quote_offset(), open, high, low, close) : initial_index;
+        // thus the implementation of indicatorUpdateShift()
+        const int update_idx = initial_index == EMPTY ? latestQuoteShift() : initial_index;
+        DEBUG(indicatorName() + " Updating to index %d", update_idx);
         if (update_idx > price_mgr.extent)
         {
             setExtent(update_idx, padding);
         }
 
-        restoreState(update_idx + 1); // FIXME +1 backtrack for restore should always be sufficient
+        restoreState(update_idx + 1);
 
-        // PriceBuffer *buffer = NULL; // FIXME TBD
         for (int idx = update_idx; idx >= __latest__; idx--)
         {
-            calcMain(idx, open, high, low, close);
+            calcMain(idx, open, high, low, close, volume);
             storeState(idx);
         }
         latest_quote_dt = iTime(symbol, timeframe, __latest__);
         return latest_quote_dt;
     };
 
-    virtual datetime updateVars(QuoteMgrOHLC &quote_mgr, const int initial_index = EMPTY, const int padding = EMPTY)
+    // call updatevars() for quote buffers provided by the QuoteMgr
+    virtual datetime updateVars(QuoteMgr &quote_mgr, const int initial_index = EMPTY, const int padding = EMPTY)
     {
-        return updateVars(quote_mgr.open_buffer.data, quote_mgr.high_buffer.data, quote_mgr.low_buffer.data, quote_mgr.close_buffer.data, initial_index, padding);
+        return updateVars(quote_mgr.open_buffer.data, quote_mgr.high_buffer.data, quote_mgr.low_buffer.data, quote_mgr.close_buffer.data, quote_mgr.vol_buffer.data, initial_index, padding);
     };
 
-    virtual datetime initVars(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const int padding = EMPTY)
+    // run calcInitial() then storing each buffer's state
+    // to the buffer's data array, finally dispatching to
+    // updateVars() for the index returned from calcInitial()
+    virtual datetime initVars(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[], const int padding = EMPTY)
     {
         if (!setExtent(_extent, padding))
         {
-            printf("%s: Unable to set initial extent %d", indicator_name(), _extent);
+            printf("%s: Unable to set initial extent %d", indicatorName(), _extent);
             return EMPTY;
         }
-        DEBUG("%s: Bind intial value in %d", indicator_name(), _extent);
+        DEBUG("%s: Bind intial value in %d", indicatorName(), _extent);
         latest_quote_dt = 0;
-        const int calc_idx = calcInitial(_extent, open, high, low, close);
-        DEBUG("%s: Initializing data [%d/%d]", indicator_name(), calc_idx, _extent);
+        const int calc_idx = calcInitial(_extent, open, high, low, close, volume);
+        DEBUG("%s: Initializing data [%d/%d]", indicatorName(), calc_idx, _extent);
 
         storeState(calc_idx);
 
-        return updateVars(open, high, low, close, calc_idx - 1, padding);
+        return updateVars(open, high, low, close, volume, calc_idx - 1, padding);
     };
 
-    virtual datetime initVars(const int _extent, QuoteMgrOHLC &quote_mgr, const int padding = EMPTY)
+    // dispatch to initVars() for quote buffers provided by the QuoteMgr
+    virtual datetime initVars(const int _extent, QuoteMgr &quote_mgr, const int padding = EMPTY)
     {
-        return initVars(_extent, quote_mgr.open_buffer.data, quote_mgr.high_buffer.data, quote_mgr.low_buffer.data, quote_mgr.close_buffer.data, padding);
+        return initVars(_extent, quote_mgr.open_buffer.data, quote_mgr.high_buffer.data, quote_mgr.low_buffer.data, quote_mgr.close_buffer.data, quote_mgr.vol_buffer.data, padding);
     };
-
-    // Initialize any indicator display for this indicator implementation
-    //
-    // Prototyped with RSIpp, for each of nr_buffers
-    virtual void initIndicator() = 0;
 };
 
 #endif

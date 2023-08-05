@@ -86,7 +86,6 @@ int zz_init(const string shortname, double &pricebuff[], double &statebuff[], in
     // bool buffers_alloc = IndicatorBuffers(nrubffers);
     //// ^ FIXME may need to be called first
 
-
     IndicatorShortName(shortname);
     IndicatorDigits(Digits);
 

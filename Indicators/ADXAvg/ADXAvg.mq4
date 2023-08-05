@@ -6,7 +6,7 @@
 
 #property strict
 
-#property indicator_buffers 3 // number of drawn buffers
+#property indicator_buffers 4 // number of drawn buffers
 
 // FIXME add level descriptor
 // - DX limit at xover = 25
@@ -23,14 +23,14 @@
 #property indicator_width3 1
 #property indicator_style3 STYLE_SOLID
 
-
-
 #property indicator_level1     25.0
 #property indicator_levelcolor clrDarkSlateGray
 
+extern const ENUM_APPLIED_PRICE adxavg_price_mode = PRICE_TYPICAL; // ATR Applied Price
+
 #include <../Libraries/libMTA/libADX.mq4>
 
-ADXAvgBuffer* avg_buff;
+ADXAvg* avg_buff;
 
 int OnInit()
 {
@@ -39,7 +39,8 @@ int OnInit()
   string shortname = "ADXAvg";
 
   /// TEST
-  const int periods[] = {20, 15, 5}; // ctrl
+  // const int periods[] = {20, 15, 5}; // ctrl
+  const int periods[] = {20, 10, 5}; // new ctrl
   // const int periods[3] = {10, 5, 20}; // test unordered inputs
 
   const int shifts[] = {5, 3, 3}; // ctrl
@@ -48,24 +49,25 @@ int OnInit()
   const double weights[] = {0.35, 0.50, 0.15}; // ctrl
   // const double weights[] = {0.35, 0.4, 0.25};
 
-  avg_buff = new ADXAvgBuffer(ArraySize(periods), periods, shifts, weights);
+  avg_buff = new ADXAvg(ArraySize(periods), periods, shifts, weights, adxavg_price_mode);
+  
   printf("Initialized avg_buff with %d members, total weight %f, first period %d", avg_buff.n_adx_members, avg_buff.total_weights, avg_buff.longest_period);
   
-  ADXIter *iterators[];
+  ADXIndicator *iterators[];
   avg_buff.copyIter(iterators);
   double out_weights[];
   avg_buff.copyWeights(out_weights);
 
   for(int n = 0; n < avg_buff.n_adx_members; n++) {
     // DEBUG
-    const ADXIter *iter = iterators[n];
+    const ADXIndicator *iter = iterators[n];
     const double weight = out_weights[n];
     printf("ADX Iterator [%d] (%d, %d) weight %f", n, iter.ema_period, iter.ema_shift, weight);
   }
 
   printf("Total weights %f", avg_buff.total_weights);
 
-  IndicatorBuffers(avg_buff.nDataBuffers());
+  IndicatorBuffers(avg_buff.dataBufferCount());
   avg_buff.initIndicator();
 
   return (INIT_SUCCEEDED);
@@ -86,12 +88,12 @@ int OnCalculate(const int rates_total,
   if (prev_calculated == 0)
   {
     printf("initializing for %d quotes", rates_total);
-    avg_buff.initVars(rates_total, open, high, low, close, 0);
+    avg_buff.initVars(rates_total, open, high, low, close, tick_volume, 0);
     }
   else
   {
     DEBUG("Updating ... %d", rates_total - prev_calculated);
-    avg_buff.updateVars(open, high, low, close, EMPTY, 0);
+    avg_buff.updateVars(open, high, low, close, tick_volume, EMPTY, 0);
   }
   return rates_total;
 }
