@@ -149,7 +149,7 @@ public:
         if (dblZero(dsum))
             return nsum / (2 * DBL_EPSILON);
         const double rslt = (nsum / dsum) * pchg; 
-        return rslt
+        return rslt;
     }
 
     double calcRviSignal(const int idx)
