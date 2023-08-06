@@ -583,7 +583,7 @@ public:
             // ^ This did not work in MT4 with simply the following: rate_far <= rate_mid >= rate_near
             {
                 const double rev_rate = (rate_far + rate_mid + rate_near) / 3; // TBD. This may need further weighting
-                const double adj_rate = rev_rate - xover_rate + rate_opp;
+                const double adj_rate = xover_rate + sqrt(pow(rev_rate - xover_rate, 2) + pow(xover_rate - rate_opp, 2));
                 rebuff.set(predx, EMPTY_VALUE);
                 // rebuff.set(mid_predx, rev_rate);
                 rebuff.set(mid_predx, adj_rate);
