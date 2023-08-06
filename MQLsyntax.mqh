@@ -1,23 +1,22 @@
+// MQL 4 Language Support for C++ Editor Tools
+
+// Usage:
 // #include <MQLsyntax.mqh>
 
+// Original Inspiration:
 // https://c.mql5.com/3/176/MQLsyntax.mqh
 // via
 // https://www.mql5.com/en/forum/222553/page3#comment_6719227
 
-// TBD ensuring VS code preloads this file, for all *.mqh under the MQL4 user root dir
-
-// FIXME emulate the original MQH definitions more closely (MQL4)
-// e.g enum as enum, etc
+// Formal reference:
 //
-// this also needs function prototypes ...
+// - Function Names
+//   MQL4 https://docs.mql4.com/function_indices
+//   MQL5 https://www.mql5.com/en/docs/function_indices
 //
-// funcdtion names, MQL4: https://docs.mql4.com/function_indices
-//
-// MQL5, novel indicators included: https://www.mql5.com/en/docs/function_indices
 
 #ifndef _MQL_SYNTAX_
-
-#define _MQL_SYNTAX_
+#define _MQL_SYNTAX_ 1
 
 #include <stdio.h>
 
@@ -76,6 +75,8 @@ void ArrayFree(void *array[]);
  * Time
  */
 
+int _Period;
+
 enum ENUM_TIMEFRAMES
 {
     PERIOD_CURRENT = 0,
@@ -112,15 +113,40 @@ struct MqlDateTime
 string TimeToStr(datetime dt, int mode = TIME_DATE | TIME_MINUTES);
 string TimeToString(datetime dt, int mode = TIME_DATE | TIME_MINUTES);
 
-
 /**
  * Charts and Symbols
  **/
 
-int _Period;
-string _Symbol;
+int _Period;    // timeframe period of the current chart
+string _Symbol; // symbol of the current chart
 
+long ChartOpen(string symbol, ENUM_TIMEFRAMES period);
+
+// index for the first chart of the client terminal
+long ChartFirst();
+
+// index of the next chart, or -1 if last. use current_id 0 or ChartFirst() for first index
+long ChartNext(long current_id);
+
+/// @brief open a new chart for the symbol and timeframe
+/// @param symbol chart symbol, NULL for current symbol
+/// @param timeframe chart timeframe, 0 for current timeframe
+/// @return current chart index of the new chart, or 0 on failure. On failure, see GetLastError()
+long ChartOpen(string symbol, ENUM_TIMEFRAMES timeframe);
+
+/// @brief close the chart
+/// @param chart_id chart index, 0 for current chart
+/// @return true if closed, else false
+bool ChartClose(long chart_id = 0L);
+
+/// @brief timeframe for the chart
+/// @param chart_id chart index, 0 for current chart
+/// @return timeframe for the chart. If no chart is found for the index, returns 0
 enum ENUM_TIMEFRAMES ChartPeriod(long chart_id = 0L);
+
+/// @brief symbol for the chart
+/// @param chart_id chart index, 0 for current chart
+/// @return chart symbol, or the empty string if no chart is found for the index
 const string ChartSymbol(long chart_id = 0L);
 
 struct MqlTick
@@ -136,6 +162,7 @@ bool SymbolInfoTick(
     string symbol,
     MqlTick &tick);
 
+/// @brief MQL Rate Quote structure
 struct MqlRates
 {
     datetime time;    // Quote start time
@@ -144,8 +171,8 @@ struct MqlRates
     double low;       // Quote low
     double close;     // Quote close
     long tick_volume; // Tick volume
-    int spread;       // Quote Spread
-    long real_volume; // Trade volume
+    int spread;       // Quote Spread, generally 0 if not available
+    long real_volume; // Trade volume, generally 0 if not available
 };
 
 int CopyRates(
@@ -169,6 +196,10 @@ int CopyRates(
     datetime stop,
     MqlRates rates[]);
 
+/// @brief refresh rates for expert advisor data
+/// @return true if data was refreshed, false if previous data is current
+bool RefreshRates();
+
 int CopyOpen(string symbol, int timeframe, int start, int count, double *open[]);
 int CopyHigh(string symbol, int timeframe, int start, int count, double *high[]);
 int CopyLow(string symbol, int timeframe, int start, int count, double *low[]);
@@ -176,13 +207,18 @@ int CopyClose(string symbol, int timeframe, int start, int count, double *close[
 int CopyTime(string symbol, int timeframe, int start, int count, datetime *times[]);
 int CopyTickVolume(string symbol, int timeframe, int start, int count, datetime *times[]);
 
-double Open[];
-double High[];
-double Low[];
-double Close[];
-datetime Time[];
+double Open[];   // current symbol's open quotes (time-series index)
+double High[];   // current symbol's high quotes (time-series index)
+double Low[];    // current symbol's low quotes (time-series index)
+double Close[];  // current symbol's close quotes (time-series index)
+datetime Time[]; // current symbol's quote times (time-series index)
+long Volume[];   // current symbol's tick volume quotes (time-series index)
 
-const int Digits;
+int Bars;      // number of bars in current chart, at chart's symbol and timeframe
+int Digits;    // decimal accuracy of current symbol prices
+int _Digits;   // decimal accuracy of current symbol prices
+double Point;  // current symbol's point value, in quote currency
+double _Point; // current symbol's point value, in quote currency
 
 double _Ask;
 double _Bid;
@@ -515,6 +551,10 @@ double iADX(string &symbol, int timeframe, int period, int applied_price, _ADX_M
  * MQL Programs
  */
 
+int _LastError;
+int _RandomSeed;
+bool _StopFlag;
+int _UninitReason;
 
 enum _DEINIT_REASON
 {
