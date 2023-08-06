@@ -8,6 +8,7 @@
 #include <MQLsyntax.mqh>
 #endif
 
+#property description "An adaptation of Gerald Appel's Moving Average Convergence Divergence (MACD)"
 #property copyright "Copyright 2023, Sean Champ"
 #property link "https://www.example.com/nop"
 #property version "1.00"
@@ -39,11 +40,11 @@ extern const int macd_slow_ema = 26;                               // Slow EMA
 extern const int macd_signal_ema = 9;                              // Signal EMA
 extern const ENUM_PRICE_MODE macd_price_mode = PRICE_MODE_TYPICAL; // Price Mode
 
-MACDIndicator *macd_in;
+MACDData *macd_in;
 
 int OnInit()
 {
-  macd_in = new MACDIndicator(macd_fast_ema, macd_slow_ema, macd_signal_ema, macd_price_mode, _Symbol, _Period);
+  macd_in = new MACDData(macd_fast_ema, macd_slow_ema, macd_signal_ema, macd_price_mode, _Symbol, _Period);
   macd_in.initIndicator();
   return (INIT_SUCCEEDED);
 }

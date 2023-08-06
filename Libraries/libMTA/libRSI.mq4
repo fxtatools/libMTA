@@ -9,7 +9,7 @@
 #include "indicator.mq4"
 
 /// @brief RSI Indicator
-class RSIIndicator : public PriceIndicator
+class RSIData : public PriceIndicator
 {
 protected:
     PriceBuffer *rsi_data;
@@ -18,7 +18,7 @@ public:
     const int ma_period;
     const int price_mode;
 
-    RSIIndicator(const int _ma_period,
+    RSIData(const int _ma_period,
                  const int _price_mode,
                  const string _symbol = NULL,
                  const int _timeframe = EMPTY,
@@ -34,7 +34,7 @@ public:
     {
         rsi_data = price_mgr.primary_buffer;
     };
-    ~RSIIndicator()
+    ~RSIData()
     {
         // the data buffer should be deleted within the buffer manager protocol
         // as activated under the PriceIndicator dtor

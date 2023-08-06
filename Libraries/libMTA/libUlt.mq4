@@ -8,7 +8,7 @@
 
 // refs:
 // - Kaufman, P. J. (2013). Momentum and Oscillators. In Trading Systems and Methods (5. Aufl., 5, Vol. 591). Wiley. 402-403
-class UltOsc : public PriceIndicator
+class UltData : public PriceIndicator
 {
 protected:
     PriceBuffer *ult_buffer;
@@ -23,7 +23,7 @@ public:
     const int price_mode;
     const int longest_period;
 
-    UltOsc(const int a = 7,
+    UltData(const int a = 7,
            const int b = 14,
            const int c = 28,
            const int a_scale = 4,
@@ -50,7 +50,7 @@ public:
     {
         ult_buffer = price_mgr.primary_buffer;
     }
-    ~UltOsc()
+    ~UltData()
     {
         // buffer deletion is managed under the buffer manager protocol
         ult_buffer = NULL;

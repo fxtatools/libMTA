@@ -5,9 +5,11 @@
 //+------------------------------------------------------------------+
 #property strict
 
+#property description "An adaptation of Welles Wilder's Average Directional Index"
+
 #property indicator_separate_window
 
-#property indicator_buffers 4 // number of drawn buffers
+#property indicator_buffers 5 // number of drawn buffers
 
 #property indicator_color1 clrYellow
 #property indicator_width1 1
@@ -21,6 +23,15 @@
 #property indicator_width3 1
 #property indicator_style3 STYLE_SOLID
 
+#property indicator_color4 clrDeepSkyBlue
+#property indicator_width4 1
+#property indicator_style4 STYLE_DOT
+
+#property indicator_color5 clrLimeGreen
+#property indicator_width5 1
+#property indicator_style5 STYLE_DOT
+
+
 #property indicator_level1     20.0
 #property indicator_levelcolor clrDarkSlateGray
 
@@ -30,12 +41,12 @@ extern const ENUM_APPLIED_PRICE iadx_price_mode = PRICE_TYPICAL; // ATR Applied 
 
 #include <../Libraries/libMTA/libADX.mq4>
 
-ADXIndicator *adx_in;
+ADXData *adx_data;
 
 int OnInit()
 {
-  adx_in = new ADXIndicator(iadx_period, iadx_period_shift, iadx_price_mode, _Symbol, _Period);
-  adx_in.initIndicator();
+  adx_data = new ADXData(iadx_period, iadx_period_shift, iadx_price_mode, _Symbol, _Period);
+  adx_data.initIndicator();
   return (INIT_SUCCEEDED);
 }
 
@@ -53,16 +64,16 @@ int OnCalculate(const int rates_total,
   if (prev_calculated == 0)
   {
     DEBUG("initializing for %d quotes", rates_total);
-    adx_in.initVars(rates_total, open, high, low, close, tick_volume, 0);
+    adx_data.initVars(rates_total, open, high, low, close, tick_volume, 0);
   }
   else
   {
-    adx_in.updateVars(open, high, low, close, tick_volume, EMPTY, 0);
+    adx_data.updateVars(open, high, low, close, tick_volume, EMPTY, 0);
   }
   return rates_total;
 }
 
 void OnDeinit(const int dicode)
 {
-  FREEPTR(adx_in);
+  FREEPTR(adx_data);
 }

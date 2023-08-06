@@ -8,16 +8,24 @@
 #property library
 #property strict
 
-class ADXIndicator : public ATRIndicator
+/// @brief Average Directional Movement Index
+class ADXData : public ATRData
 {
 
 protected:
     // a generalized constructor for application under ADXAvg,
     // which uses no single EMA period
-    ADXIndicator(const int _price_mode,
-                 const string _symbol = NULL,
-                 const int _timeframe = EMPTY,
-                 const string _name = "ADX++") : ATRIndicator(_price_mode, _symbol, _timeframe, _name, 6)
+    ADXData(const int _price_mode,
+             const string _symbol = NULL,
+             const int _timeframe = EMPTY,
+             const string _name = "ADX++") : earlier_xover(EMPTY_VALUE),
+                                             previous_xover(EMPTY_VALUE),
+                                             previous_xover_bearish(false),
+                                             ATRData(_price_mode,
+                                                      _symbol,
+                                                      _timeframe,
+                                                      _name,
+                                                      7)
     {
         initBuffers(atr_buffer);
     };
@@ -29,7 +37,56 @@ protected:
         minus_dm_buffer = plus_dm_buffer.next();
         plus_di_buffer = minus_dm_buffer.next();
         minus_di_buffer = plus_di_buffer.next();
+        xbuff = minus_di_buffer.next();
+        rebuff = xbuff.next();
     };
+
+    PriceXOver *adxover;
+    datetime earlier_xover;
+    datetime previous_xover;
+    bool previous_xover_bearish;
+
+    bool recordCrossover(const int idx)
+    {
+
+        ///
+        /// Crossover Detection
+        ///
+
+        const int faridx = idx + 1;
+
+        const double plus_di_pre = plus_di_buffer.get(faridx);
+        if (plus_di_pre == EMPTY_VALUE)
+        {
+            xbuff.setState(EMPTY_VALUE);
+            DEBUG("xover - No +DI at " + offset_time_str(faridx));
+            return false;
+        }
+        const double plus_di_cur = plus_di_buffer.getState();
+        const double minus_di_pre = minus_di_buffer.get(faridx);
+        const double minus_di_cur = minus_di_buffer.getState();
+        bool bearish = false;
+
+        if ((plus_di_pre > minus_di_pre) && (plus_di_cur < minus_di_cur))
+        {
+            bearish = true;
+        }
+        else if (!((minus_di_pre > plus_di_pre) && (minus_di_cur < plus_di_cur)))
+        {
+            xbuff.setState(EMPTY_VALUE);
+            return false;
+        }
+        const datetime pre_time = offset_time(faridx, symbol, timeframe);
+        const datetime cur_time = offset_time(idx, symbol, timeframe);
+        earlier_xover = previous_xover;
+        previous_xover = cur_time;
+        previous_xover_bearish = bearish;
+        adxover.bind(bearish, plus_di_cur, plus_di_pre, minus_di_cur, minus_di_pre, cur_time, pre_time);
+        const double xr = adxover.rate();
+        xbuff.setState(xr);
+        DEBUG("Xover located to " + TimeToStr(cur_time));
+        return true;
+    }
 
 public:
     // Implementation Notes:
@@ -39,19 +96,31 @@ public:
     //   though likewise more erratic over durations
     // - period_shift should always be provided as < period
     // - for a conventional EMA behavior, provide period_shift = 1
-    ADXIndicator(const int period,
-                 const int period_shift = 1,
-                 const int _price_mode = PRICE_CLOSE,
-                 const string _symbol = NULL,
-                 const int _timeframe = EMPTY,
-                 const string _name = "ADX++",
-                 const int _nr_buffers = 6,
-                 const int _data_shift = EMPTY) : ATRIndicator(period, period_shift, _price_mode, false, _symbol, _timeframe, _name, _data_shift, _nr_buffers)
+    ADXData(const int period,
+             const int period_shift = 1,
+             const int _price_mode = PRICE_CLOSE,
+             const string _symbol = NULL,
+             const int _timeframe = EMPTY,
+             const string _name = "ADX++",
+             const int _nr_buffers = 8,
+             const int _data_shift = EMPTY) : earlier_xover(EMPTY_VALUE),
+                                              previous_xover(EMPTY_VALUE),
+                                              previous_xover_bearish(false),
+                                              ATRData(period,
+                                                       period_shift,
+                                                       _price_mode,
+                                                       false,
+                                                       _symbol,
+                                                       _timeframe,
+                                                       _name,
+                                                       _data_shift,
+                                                       _nr_buffers)
     {
         initBuffers(atr_buffer);
+        adxover = new PriceXOver();
     };
 
-    ~ADXIndicator()
+    ~ADXData()
     {
         /// linked buffers will be deleted within the BufferMgr protocol
         dx_buffer = NULL;
@@ -59,6 +128,9 @@ public:
         minus_dm_buffer = NULL;
         plus_di_buffer = NULL;
         minus_di_buffer = NULL;
+        xbuff = NULL;
+        rebuff = NULL;
+        FREEPTR(adxover);
     };
 
     // the following objects will be initialized from values created
@@ -71,12 +143,15 @@ public:
     PriceBuffer *minus_dm_buffer;
     PriceBuffer *plus_di_buffer;
     PriceBuffer *minus_di_buffer;
+    // data buffers for crossover and reversal analysis
+    PriceBuffer *xbuff;
+    PriceBuffer *rebuff;
 
     virtual int dataBufferCount() const
     {
         // return the number of buffers used directly for this indicator.
         // should be incremented internally, in derived classes
-        return ATRIndicator::dataBufferCount() + 5;
+        return ATRData::dataBufferCount() + 7;
     };
 
     virtual string indicator_name() const
@@ -165,8 +240,9 @@ public:
     {
         return low[idx + 1] - low[idx];
     };
-    
-    double chg(const int idx, const double &open[], const double &high[], const double &low[], const double &close[]) {
+
+    double chg(const int idx, const double &open[], const double &high[], const double &low[], const double &close[])
+    {
         const double p_near = price_for(idx, price_mode, open, high, low, close);
         const double p_far = price_for(idx, price_mode, open, high, low, close);
         return p_near - p_far;
@@ -183,7 +259,7 @@ public:
     {
         // update ATR to current, from previously initialized ATR
         DEBUG(indicator_name() + " Previous ATR at calcDx [%d] %s : %f", idx, offset_time_str(idx), atr_buffer.getState());
-        ATRIndicator::calcMain(idx, open, high, low, close, volume);
+        ATRData::calcMain(idx, open, high, low, close, volume);
         double atr_cur = atr_buffer.getState();
         // ^ FIXME something about the ATR calculation at [0] is breaking now in ADXAvg
 
@@ -232,9 +308,7 @@ public:
             const double mov_minus = minusDm(offset, high, low);
             // const double wfactor = ((double)p_k * volume[idx]) / ema_period_dbl; // mWMA feat. volume
             // const double wfactor = ((double)p_k / volume[idx]) / ema_period_dbl ; // mWMA feat. volume++
-            // ? 
-            const double wfactor = ((double)p_k ) / (ema_period_dbl * volume[idx]) ; // mWMA feat. volume+++
-
+            const double wfactor = ((double)p_k) / (ema_period_dbl * volume[idx]); // mWMA feat. volume+++
 
             // const double wfactor = (double)p_k / ema_period_dbl; // mWMA
 
@@ -323,12 +397,12 @@ public:
         */
 
         /// or: standard ema (forward-shift unused here)
-        
+
         if (plus_dm_prev != DBL_MIN)
             sm_plus_dm = ema(plus_dm_prev, sm_plus_dm, ema_period);
         if (minus_dm_prev != DBL_MIN)
             sm_minus_dm = ema(minus_dm_prev, sm_minus_dm, ema_period);
-        
+
         // or RVI-like WMA
         /*
         if (plus_dm_prev != DBL_MIN)
@@ -337,7 +411,7 @@ public:
             sm_minus_dm = (2.0 * minus_dm_prev + (sm_minus_dm)) / 3.0;
         */
         // ... similarly, RVI-like WMA using input parameters (??)
-        
+
         /*
         if (plus_dm_prev != DBL_MIN)
             sm_plus_dm = ((ema_shift * plus_dm_prev) + (sm_plus_dm * ema_shifted_period)) / ema_period_dbl;
@@ -394,7 +468,7 @@ public:
     // This method will not produce an EMA for the initial DX value
     virtual int calcInitial(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
     {
-        int calc_idx = ATRIndicator::calcInitial(_extent, open, high, low, close, volume);
+        int calc_idx = ATRData::calcInitial(_extent, open, high, low, close, volume);
         double atr_cur = atr_buffer.getState();
 
         if (atr_cur == 0)
@@ -411,6 +485,8 @@ public:
         plus_dm_buffer.setState(DBL_MIN);
         minus_dm_buffer.setState(DBL_MIN);
         calcDx(calc_idx, open, high, low, close, volume);
+        xbuff.setState(EMPTY_VALUE);
+        rebuff.setState(EMPTY_VALUE);
         return calc_idx;
     }
 
@@ -429,47 +505,175 @@ public:
         const double adx = ema(adx_pre, dx_cur, ema_period);
         DEBUG(indicator_name() + " DX (%f, %f) => %f at %s [%d]", adx_pre, dx_cur, adx, offset_time_str(idx), idx);
         dx_buffer.setState(adx);
+
+        ///
+        /// Crossover Detection & Reversal Recording
+        ///
+
+        const bool xover = recordCrossover(idx);
+        const bool detect_reversal = (xover || idx == 0);
+        if (!detect_reversal)
+        {
+            return;
+        }
+
+        /// Implementation Notes:
+        //
+        // - In order to detect immediate inter-crossover reversals
+        //   before the next +DI/-DI crossover emerges, this will
+        //   backtrack to the previous +DI/-DI crossover, after
+        //   any intermediate crossover or when idx == 0
+        //
+        // - In this method's present implementation, only reversals
+        //   in the prevailing +DI/-DI rate will be analyzed here.
+        //   This is a known limitation.
+        //   It may suffice at least for prototyping
+
+        const int previous_shift = iBarShift(symbol, timeframe, previous_xover);
+
+        const datetime farthest_dt = (idx == 0 && previous_shift != 0) ? previous_xover : earlier_xover;
+
+        if (farthest_dt == EMPTY_VALUE)
+        {
+            return;
+        }
+
+        double rate_far = DBLZERO;  // rate of the gaining trend line, before reversal
+        double rate_mid = DBLZERO;  // rate of the gaining trend line, at reversal
+        double rate_near = DBLZERO; // rate of the gaining trend line, after reversal
+        double rate_opp = DBLZERO;  // rate of the opposing trend line, at reversal
+
+        const int xover_shift = iBarShift(symbol, timeframe, farthest_dt);
+        const double xover_rate = xbuff.get(xover_shift);
+        const bool bearish = minus_di_buffer.get(xover_shift) > plus_di_buffer.get(xover_shift);
+
+        DEBUG("Detecting " + (bearish ? "-DI" : "+DI") + " reversals [" + TimeToStr(farthest_dt) + ", " + offset_time_str(idx) + "]"); // DEBUG
+
+        for (int far_predx = xover_shift; far_predx > idx; far_predx--)
+        {
+            const int mid_predx = far_predx - 1;
+            if (mid_predx == idx)
+            {
+                break;
+            }
+            const int predx = mid_predx - 1;
+
+            // DEBUG("rev detect far %d, mid %d, near %d", far_predx, mid_predx, predx);
+            if (bearish)
+            {
+                rate_far = minus_di_buffer.get(far_predx);
+                rate_mid = minus_di_buffer.get(mid_predx);
+                rate_near = predx == idx ? minus_di_buffer.getState() : minus_di_buffer.get(predx);
+                rate_opp = plus_di_buffer.get(mid_predx);
+            }
+            else
+            {
+                rate_far = plus_di_buffer.get(far_predx);
+                rate_mid = plus_di_buffer.get(mid_predx);
+                rate_near = predx == idx ? plus_di_buffer.getState() : plus_di_buffer.get(predx);
+                rate_opp = minus_di_buffer.get(mid_predx);
+            }
+            if (rate_far == EMPTY_VALUE || rate_mid == EMPTY_VALUE || rate_near == EMPTY_VALUE)
+            {
+                DEBUG("Reversal detection not available at %d, %d, %d (%f, %f, %f) to " + offset_time_str(predx, symbol, timeframe), predx, mid_predx, far_predx, rate_near, rate_mid, rate_far); // DEBUG
+                continue;
+            }
+            DEBUG("%f, %f, %f to " + offset_time_str(predx, symbol, timeframe), rate_far, rate_mid, rate_near);
+            if (rate_far <= rate_mid && rate_mid >= rate_near)
+            // ^ This did not work in MT4 with simply the following: rate_far <= rate_mid >= rate_near
+            {
+                const double rev_rate = (rate_far + rate_mid + rate_near) / 3; // TBD. This may need further weighting
+                const double adj_rate = rev_rate - xover_rate + rate_opp;
+                rebuff.set(predx, EMPTY_VALUE);
+                // rebuff.set(mid_predx, rev_rate);
+                rebuff.set(mid_predx, adj_rate);
+                rebuff.set(far_predx, EMPTY_VALUE);
+                DEBUG((previous_xover_bearish ? "-DI" : "+DI") + " Reversal detected at " + offset_time_str(mid_predx));
+            }
+            // else
+            // {
+            //     rebuff.set(mid_predx, EMPTY_VALUE);
+            // }
+        }
     };
 
     virtual void initIndicator()
     {
+        // if !
         PriceIndicator::initIndicator();
+        // return
 
         // bind all drawn and undrawn buffers to the indicator
-        SetIndexBuffer(0, plus_di_buffer.data);
-        SetIndexLabel(0, "+DI");
-        SetIndexStyle(0, DRAW_LINE);
+        int idx = 0;
+        SetIndexBuffer(idx, plus_di_buffer.data);
+        SetIndexLabel(idx, "+DI");
+        SetIndexStyle(idx++, DRAW_LINE);
 
-        SetIndexBuffer(1, minus_di_buffer.data);
-        SetIndexLabel(1, "-DI");
-        SetIndexStyle(1, DRAW_LINE);
+        SetIndexBuffer(idx, minus_di_buffer.data);
+        SetIndexLabel(idx, "-DI");
+        SetIndexStyle(idx++, DRAW_LINE);
 
-        SetIndexBuffer(2, dx_buffer.data);
-        SetIndexLabel(2, "DX");
-        SetIndexStyle(2, DRAW_LINE);
+        SetIndexBuffer(idx, dx_buffer.data);
+        SetIndexLabel(idx, "DX");
+        SetIndexStyle(idx++, DRAW_LINE);
+
+        SetIndexBuffer(idx, xbuff.data);
+        SetIndexLabel(idx, "XR"); // rate at crossover
+        SetIndexStyle(idx++, DRAW_SECTION);
+
+        SetIndexBuffer(idx, rebuff.data);
+        SetIndexLabel(idx, "Rev"); // adjusted rate at reversal
+        SetIndexStyle(idx++, DRAW_SECTION);
 
         // non-drawn buffers
         const bool draw_atr = debug;
         // const bool draw_atr = true;
-        SetIndexBuffer(3, atr_buffer.data, draw_atr ? INDICATOR_DATA : INDICATOR_CALCULATIONS);
-        SetIndexLabel(3, draw_atr ? "DX ATR" : NULL);
-        SetIndexStyle(3, draw_atr ? DRAW_LINE : DRAW_NONE);
+        SetIndexBuffer(idx, atr_buffer.data, draw_atr ? INDICATOR_DATA : INDICATOR_CALCULATIONS);
+        SetIndexLabel(idx, draw_atr ? "DX ATR" : NULL);
+        SetIndexStyle(idx++, draw_atr ? DRAW_LINE : DRAW_NONE);
 
-        SetIndexBuffer(4, plus_dm_buffer.data, INDICATOR_CALCULATIONS);
-        SetIndexLabel(4, NULL);
-        SetIndexStyle(4, DRAW_NONE);
+        SetIndexBuffer(idx, plus_dm_buffer.data, INDICATOR_CALCULATIONS);
+        SetIndexLabel(idx, NULL);
+        SetIndexStyle(idx++, DRAW_NONE);
 
-        SetIndexBuffer(5, minus_dm_buffer.data, INDICATOR_CALCULATIONS);
-        SetIndexLabel(5, NULL);
-        SetIndexStyle(5, DRAW_NONE);
+        SetIndexBuffer(idx, minus_dm_buffer.data, INDICATOR_CALCULATIONS);
+        SetIndexLabel(idx, NULL);
+        SetIndexStyle(idx++, DRAW_NONE);
     };
 
+    /// @brief Locate the nearest crossover of +DI/-DI indicator values, from nearest start index to furthest end index.
+    ///
+    /// @par Usage
+    /// If a crossover of +DI/-DI indicator values is found within the specified index range, the xover object
+    /// will be initialized with PriceXOver 'A' values representing the +DI indicator line and 'B' values representing
+    /// the -DI indicator line. As a convenience, xoverFarPlusDI() and similar methods may be used for
+    /// accessing these values from the initialized crossover.
+    ///
+    /// @par
+    /// After analsysis, the xover.clear() method may be used to reset all configured values.
+    ///
+    /// @par Notes - Analysis
+    /// It should be noted that a +DI/-DI crossover may not represent the most significant event within
+    /// a trend indicated with +DI/-DI. Typically, a single <u>+DI/-DI reversal</u> chronologically previous
+    /// to a point of crossover may indicate the earlier beginning of an immediate market trend.
+    ///
+    /// @par
+    /// Within a duration between two chronologically subsequent +DI/-DI crossovers, when more than one
+    /// +DI/-DI reversal occurs within the duration, the +DI/-DI reversal at the point of greatest relative
+    /// +DI/-DI value may represent the begining of the general trend for that +DI or -DI line within that
+    /// time period - respectively, of a bearish or bullish trend at immediate scale.
+    ///
+    /// @param xover [inout] PriceXOver object for storing the crossover data
+    /// @param start [in] chronologically most recent index for time-series analysis, 0 for current.
+    /// @param end [in] chronologically earliest index for time-series analysis.
+    ///        EMPTY to use the total number of indicator rates at time of call.
+    /// @return true if a crossover was found within the index range. Otherwise,  false.
     virtual bool bind(PriceXOver &xover, const int start = 0, const int end = EMPTY)
     {
         const bool found = xover.bind(plus_di_buffer.data, minus_di_buffer.data, this, start, end);
         if (found)
         {
-            // further +DI > further -DI
+            // bearish crossover when further +DI > further -DI
             xover.setBearish(xover.farVal() > xover.farValB());
             return true;
         }
@@ -479,41 +683,44 @@ public:
         }
     }
 
+    /// @brief utility method for PriceXOver located with bind()
+    /// @param xover the bound crossover object
+    /// @return +DI at the chronologically more recent endpoint of crossover
     double xoverNearPlusDI(PriceXOver &xover)
     {
         return xover.nearVal();
     }
+
+    /// @brief utility method for PriceXOver located with bind()
+    /// @param xover the bound crossover object
+    /// @return -DI at the chronologically more recent endpoint of crossover
     double xoverNearMinusDI(PriceXOver &xover)
     {
         return xover.nearValB();
     }
 
+    /// @brief utility method for PriceXOver located with bind()
+    /// @param xover the bound crossover object
+    /// @return +DI at the chronologically earlier endpoint of crossover
     double xoverFarPlusDI(PriceXOver &xover)
     {
         return xover.farVal();
     }
 
+    /// @brief utility method for PriceXOver located with bind()
+    /// @param xover the bound crossover object
+    /// @return -DI at the chronologically earlier endpoint of crossover
     double xoverFarMinusDI(PriceXOver &xover)
     {
         return xover.farValB();
     }
 };
 
-class ADXAvg : public ADXIndicator
+class ADXAvg : public ADXData
 {
 protected:
-    ADXIndicator *m_iter[];
+    ADXData *m_iter[];
     double m_weights[];
-
-    // FIXME absent of convnetion for passing a flag indicating "Draw no buffers",
-    // this has not been initializing all member data buffers as indicator
-    // buffers under initIndicator()
-    //
-    // This initalizes only the buffers used for capturing average data from
-    // member indicators.
-    //
-    // The rest of the buffers should be succesfully managed under
-    // BufferMgr. This is being tested locally.
 
     int max(const int n_val, const int &values[])
     {
@@ -550,7 +757,7 @@ public:
            const int _price_mode = PRICE_CLOSE,
            const string _symbol = NULL,
            const int _timeframe = EMPTY,
-           const string _name = "ADXvg") : n_adx_members(n_members), total_weights(sum(n_members, weights)), longest_period(max(n_members, periods)), ADXIndicator(_price_mode, _symbol, _timeframe, _name)
+           const string _name = "ADXvg") : n_adx_members(n_members), total_weights(sum(n_members, weights)), longest_period(max(n_members, periods)), ADXData(_price_mode, _symbol, _timeframe, _name)
 
     {
         ArrayResize(m_iter, n_members);
@@ -577,7 +784,7 @@ public:
             {
                 add_idx = idx;
             }
-            m_iter[add_idx] = new ADXIndicator(per, shift, price_mode, _symbol, _timeframe);
+            m_iter[add_idx] = new ADXData(per, shift, price_mode, _symbol, _timeframe);
             m_weights[add_idx] = weight;
             last_per = per;
         }
@@ -586,7 +793,7 @@ public:
     {
         for (int n = 0; n < n_adx_members; n++)
         {
-            ADXIndicator *it = m_iter[n];
+            ADXData *it = m_iter[n];
             m_iter[n] = NULL;
             delete it;
         }
@@ -600,18 +807,18 @@ public:
         // registered as indicator buffers
         //
         // if not called for all member buffers, there would be side
-        // effects towards calculations during indicator update,
-        // presumably as an effect of a behavior of pointer shift
-        // performed within the MT4 implementation, for indicator
-        // data.
+        // effects towards calculations during indicator update.
+        // This may represent a side effect of pointer shift or other
+        // update method performed within the MT4 implementation, for
+        // indicator buffers.
         //
-        ADXIndicator::initIndicator();
+        ADXData::initIndicator();
         const int count = dataBufferCount();
         IndicatorBuffers(count * (1 + n_adx_members));
         int next_offset = count;
         for (int n = 0; n < n_adx_members; n++)
         {
-            ADXIndicator *it = m_iter[n];
+            ADXData *it = m_iter[n];
             // bind ADX member buffers as undrawn
             SetIndexBuffer(next_offset, it.plus_di_buffer.data, INDICATOR_CALCULATIONS);
             SetIndexLabel(next_offset, NULL);
@@ -639,8 +846,8 @@ public:
         }
     }
 
-    // copy elements of the m_iter array to some provided buffer
-    int copyIter(ADXIndicator *&buffer[])
+    // copy elements of the indicator member object array to some provided buffer
+    int copyMember(ADXData *&buffer[])
     {
         if (ArrayIsDynamic(buffer) && ArraySize(buffer) < n_adx_members)
             ArrayResize(buffer, n_adx_members);
@@ -651,7 +858,7 @@ public:
         return n_adx_members;
     };
 
-    // copy elements of the m_weights array to some provided buffer
+    // copy elements of the indicator weights array to some provided buffer
     int copyWeights(double &buffer[])
     {
         if (ArrayIsDynamic(buffer) && ArraySize(buffer) < n_adx_members)
@@ -669,7 +876,7 @@ public:
             return false;
         for (int n = 0; n < n_adx_members; n++)
         {
-            ADXIndicator *it = m_iter[n];
+            ADXData *it = m_iter[n];
             if (!it.setExtent(len, padding))
                 return false;
         }
@@ -682,7 +889,7 @@ public:
             return false;
         for (int n = 0; n < n_adx_members; n++)
         {
-            ADXIndicator *it = m_iter[n];
+            ADXData *it = m_iter[n];
             if (!it.reduceExtent(len, padding))
                 return false;
         }
@@ -697,7 +904,7 @@ public:
     {
         for (int n = 0; n < n_adx_members; n++)
         {
-            ADXIndicator *it = m_iter[n];
+            ADXData *it = m_iter[n];
             it.restoreState(idx);
         }
     };
@@ -706,11 +913,11 @@ public:
     {
         for (int n = 0; n < n_adx_members; n++)
         {
-            ADXIndicator *it = m_iter[n];
+            ADXData *it = m_iter[n];
             // dispatch to restoreState(), calcMain(), and storeState() for each
             it.updateVars(open, high, low, close, volume, initial_index, padding);
         }
-        return ADXIndicator::updateVars(open, high, low, close, volume, initial_index, padding);
+        return ADXData::updateVars(open, high, low, close, volume, initial_index, padding);
     }
 
     virtual int calcInitial(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
@@ -728,7 +935,7 @@ public:
         double avg_minus_di = __dblzero__;
         for (int n = 0; n < n_adx_members; n++)
         {
-            ADXIndicator *it = m_iter[n];
+            ADXData *it = m_iter[n];
             const double weight = m_weights[n];
             if (first_idx == -1)
             {
@@ -784,7 +991,7 @@ public:
         double avg_minus_di = __dblzero__;
         for (int n = 0; n < n_adx_members; n++)
         {
-            ADXIndicator *it = m_iter[n];
+            ADXData *it = m_iter[n];
             double weight = m_weights[n];
             /// not re-running calculations here.
             // Retrieving values calculated from it.updateVars()

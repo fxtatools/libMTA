@@ -8,6 +8,7 @@
 #include <MQLsyntax.mqh>
 #endif
 
+#property description "An adaptation of Welles Wilder's Relative Strength Index"
 #property copyright "Copyright 2023, Sean Champ"
 #property link "https://www.example.com/nop"
 #property version "1.00"
@@ -30,12 +31,12 @@
 extern const int rsi_period = 10;                                 // RSI MA Period
 extern const ENUM_PRICE_MODE rsi_price_mode = PRICE_MODE_TYPICAL; // Applied Price
 
-RSIIndicator *rsi_in;
+RSIData *rsi_data;
 
 int OnInit()
 {
-    rsi_in = new RSIIndicator(rsi_period, rsi_price_mode, _Symbol, _Period);
-    rsi_in.initIndicator();
+    rsi_data = new RSIData(rsi_period, rsi_price_mode, _Symbol, _Period);
+    rsi_data.initIndicator();
     return (INIT_SUCCEEDED);
 };
 
@@ -53,17 +54,17 @@ int OnCalculate(const int rates_total,
     if (prev_calculated == 0)
     {
         DEBUG("Initialize for %d quotes", rates_total);
-        rsi_in.initVars(rates_total, open, high, low, close, tick_volume, 0);
+        rsi_data.initVars(rates_total, open, high, low, close, tick_volume, 0);
     }
     else
     {
         DEBUG("Updating for index %d", rates_total - prev_calculated);
-        rsi_in.updateVars(open, high, low, close, tick_volume, EMPTY, 0);
+        rsi_data.updateVars(open, high, low, close, tick_volume, EMPTY, 0);
     }
     return rates_total;
 };
 
 void OnDeinit(const int dicode)
 {
-    FREEPTR(rsi_in);
+    FREEPTR(rsi_data);
 };

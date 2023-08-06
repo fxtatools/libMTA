@@ -20,13 +20,13 @@ extern const bool iatr_use_points = true;                      // Points if True
 
 #include <../Libraries/libMTA/libATR.mq4>
 
-ATRIndicator *atr_iter;
+ATRData *atr_data;
 
 int OnInit()
 {
-  atr_iter = new ATRIndicator(iatr_period, iatr_period_shift, iadx_price_mode, iatr_use_points, _Symbol, _Period);
+  atr_data = new ATRData(iatr_period, iatr_period_shift, iadx_price_mode, iatr_use_points, _Symbol, _Period);
 
-  atr_iter.initIndicator();
+  atr_data.initIndicator();
 
   return (INIT_SUCCEEDED);
 }
@@ -45,12 +45,12 @@ int OnCalculate(const int rates_total,
   if (prev_calculated == 0)
   {
     DEBUG("init %d", rates_total);
-    atr_iter.initVars(rates_total, open, high, low, close, tick_volume, 0);
+    atr_data.initVars(rates_total, open, high, low, close, tick_volume, 0);
   }
   else
   {
-    DEBUG("updating %d/%d %s => %s", prev_calculated, rates_total, TimeToStr(atr_iter.latest_quote_dt), offset_time_str(0));
-    atr_iter.updateVars(open, high, low, close, tick_volume, EMPTY, 0);
+    DEBUG("updating %d/%d %s => %s", prev_calculated, rates_total, TimeToStr(atr_data.latest_quote_dt), offset_time_str(0));
+    atr_data.updateVars(open, high, low, close, tick_volume, EMPTY, 0);
   }
 
   return (rates_total);
@@ -58,5 +58,5 @@ int OnCalculate(const int rates_total,
 
 void OnDeinit(const int dicode)
 {
-  FREEPTR(atr_iter);
+  FREEPTR(atr_data);
 }

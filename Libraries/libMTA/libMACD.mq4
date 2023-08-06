@@ -15,7 +15,7 @@
 ///     In The Ultimate Algorithmic Trading System Toolbox + Website (pp. 25–76).
 ///     John Wiley & Sons, Inc. https://doi.org/10.1002/9781119262992.ch2
 ///
-class MACDIndicator : public PriceIndicator
+class MACDData : public PriceIndicator
 {
 
 protected:
@@ -35,7 +35,7 @@ public:
     PriceBuffer *splus_buf;
     PriceBuffer *sminus_buf;
 
-    MACDIndicator(const int fast_ema,
+    MACDData(const int fast_ema,
                   const int slow_ema,
                   const int signal_ema,
                   const int _price_mode,
@@ -61,7 +61,7 @@ public:
         splus_buf = signal_buf.next();
         sminus_buf = splus_buf.next();
     };
-    ~MACDIndicator()
+    ~MACDData()
     {
         // buffer deletion will be managed under PriceIndicator
         fast_ema_buf = NULL;

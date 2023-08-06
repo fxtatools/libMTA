@@ -44,7 +44,7 @@
 // Kaufman, Perry. J. (2013). Momentum and Oscillators. In Trading Systems
 //   and Methods (5th ed.). Wiley. 410-411
 //
-class HPIGraph : public PriceIndicator
+class HPIData : public PriceIndicator
 {
 protected:
     PriceBuffer *hpi_buf; // buffer for HPI EMA
@@ -53,7 +53,7 @@ public:
     const int hpi_period;     // HPI EMA period
     const int hpi_price_mode; // Price mode for the FX adpated HPI
 
-    HPIGraph(const int period = 6,
+    HPIData(const int period = 6,
              const int price_mode = PRICE_TYPICAL,
              const string _symbol = NULL,
              const int _timeframe = EMPTY,
@@ -64,7 +64,7 @@ public:
     {
         hpi_buf = price_mgr.primary_buffer;
     }
-    ~HPIGraph()
+    ~HPIData()
     {
         // buffer deletion is managed under the buffer manager protocol
         hpi_buf = NULL;
@@ -169,7 +169,7 @@ public:
 
     int calcInitial(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
     {
-        const int calc_idx = _extent - 1 - HPIGraph::dataShift();
+        const int calc_idx = _extent - 1 - HPIData::dataShift();
         hpi_buf.setState(EMPTY_VALUE);
         calcMain(calc_idx, open, high, low, close, volume);
         return calc_idx;

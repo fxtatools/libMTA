@@ -25,11 +25,11 @@ extern const ENUM_APPLIED_PRICE hpi_price_mode = PRICE_CLOSE; // Applied Price
 
 #include <../Libraries/libMTA/libHPI.mq4>
 
-HPIGraph *hpi;
+HPIData *hpi;
 
 int OnInit()
 {
-    hpi = new HPIGraph(hpi_period, hpi_price_mode, _Symbol, _Period);
+    hpi = new HPIData(hpi_period, hpi_price_mode, _Symbol, _Period);
 
     //// FIXME update API : initIndicator => bool
     // return hpi.initIndicator();

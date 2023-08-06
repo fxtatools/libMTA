@@ -16,7 +16,7 @@
 //
 // refs:
 // - Kaufman, P. J. (2013). Momentum and Oscillators. In Trading Systems and Methods (5. Aufl., 5, Vol. 591). Wiley. 403
-class RVIIn : public PriceIndicator
+class RVIData : public PriceIndicator
 {
 protected:
     PriceBuffer *rvi_buf;        // RVI buffer
@@ -33,7 +33,7 @@ public:
     const double scale_weights;
     const int xma_period;
 
-    RVIIn(const double a = 1.0,
+    RVIData(const double a = 1.0,
           const double b = 2.0,
           const double c = 2.0,
           const double d = 1.0,
@@ -52,7 +52,7 @@ public:
         xma_buf = rvi_signal_buf.next();
         xover = new PriceXOver();
     }
-    ~RVIIn()
+    ~RVIData()
     {
         // buffer deletion is managed under the buffer manager protocol
         rvi_buf = NULL;
@@ -255,8 +255,8 @@ public:
     int calcInitial(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
     {
         // 1 for index
-        const int calc_idx = _extent - 1 - RVIIn::dataShift();
-        DEBUG("Calculating Initial RVI [%d] at %d/%d", RVIIn::dataShift(), calc_idx, _extent);
+        const int calc_idx = _extent - 1 - RVIData::dataShift();
+        DEBUG("Calculating Initial RVI [%d] at %d/%d", RVIData::dataShift(), calc_idx, _extent);
         for (int n = _extent - 5; n >= calc_idx; n--)
         {
             const double rvi = calcRvi(n, open, high, low, close, volume);

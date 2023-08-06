@@ -6,7 +6,7 @@
 
 #property strict
 
-#property description "Implementation of George Lane's Stochastic Oscillator"
+#property description "An adaptation of George Lane's Stochastic Oscillator"
 
 #property indicator_buffers 2
 
@@ -41,11 +41,11 @@ extern const ENUM_APPLIED_PRICE sto_price_mode = PRICE_CLOSE; // Applied Price
 
 #include <../Libraries/libMTA/libSTO.mq4>
 
-STOIn *sto_in;
+StoData *sto_in;
 
 int OnInit()
 {
-    sto_in = new STOIn(sto_k, sto_d, sto_d_slow, sto_price_mode,  _Symbol, _Period);
+    sto_in = new StoData(sto_k, sto_d, sto_d_slow, sto_price_mode,  _Symbol, _Period);
 
     //// FIXME update API : initIndicator => bool
     // if(sto_in.initIndicator()) ...

@@ -8,13 +8,13 @@
 
 #include "indicator.mq4"
 
-// TBD: generalize CCIGraph to CCIBase,
-// - moving the signal line configuration (initIndicator) to CCIGraph.
-// - implement class CCIBands : public CCIGraph
+// TBD: generalize CCIData to CCIBase,
+// - moving the signal line configuration (initIndicator) to CCIData.
+// - implement class CCIBands : public CCIData
 //   - derive the bands from the CCI signal line in CCIBase
 
 /// @brief CCI Graph Indicator
-class CCIGraph : public PriceIndicator
+class CCIData : public PriceIndicator
 {
 protected:
     PriceBuffer *cci_data;
@@ -26,7 +26,7 @@ public:
     const int price_mode;    // CCI price mode
     const double cci_factor; // CCI scaling factor (market-dependent)
 
-    CCIGraph(const int _mean_period = 20,
+    CCIData(const int _mean_period = 20,
              const int _signal_period = 9,
              const int _price_mode = PRICE_TYPICAL,
              const double _cci_factor = EMPTY,
@@ -47,7 +47,7 @@ public:
         cci_data = price_mgr.primary_buffer;
         cci_signal = cci_data.next();
     };
-    ~CCIGraph()
+    ~CCIData()
     {
         // linked data buffers should be deleted within the buffer manager protocol
         cci_data = NULL;
@@ -142,7 +142,7 @@ public:
 
     int calcInitial(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
     {
-        const int calc_idx = _extent - 1 - CCIGraph::dataShift();
+        const int calc_idx = _extent - 1 - CCIData::dataShift();
         DEBUG("Set initial CCI values for %d/%d", calc_idx, _extent);
         cci_data.setState(DBL_MIN);
         for (int n = calc_idx + signal_period + 1; n >= calc_idx; n--)

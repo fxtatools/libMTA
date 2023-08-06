@@ -21,27 +21,23 @@
 #property indicator_width3 1
 #property indicator_style3 STYLE_SOLID
 
-/// declared in project file ...
-// #property indicator_separate_window
+#property indicator_separate_window
 
 extern const int iadx_period = 10;                               // EMA Period
 extern const int iadx_period_shift = 3;                          // Forward Shift for EMA Period
 extern const ENUM_APPLIED_PRICE iadx_price_mode = PRICE_TYPICAL; // ATR Applied Price
 
-// libATR supports using e.g by Typical Price when calculating ATR,
-// rather than the conventional close price
-
 #include <../Libraries/libMTA/libADX.mq4>
 #include <../Libraries/libMTA/quotes.mq4>
 
-ADXIndicator *adx_in;
+ADXData *adx_data;
 QuoteMgr *quotes;
 
 int OnInit()
 {
-  adx_in = new ADXIndicator(iadx_period, iadx_period_shift, iadx_price_mode, _Symbol, _Period, "ADXq++");
+  adx_data = new ADXData(iadx_period, iadx_period_shift, iadx_price_mode, _Symbol, _Period, "ADXq++");
   quotes = new QuoteMgr(0);
-  adx_in.initIndicator();
+  adx_data.initIndicator();
   return (INIT_SUCCEEDED);
 }
 
@@ -60,18 +56,18 @@ int OnCalculate(const int rates_total,
   {
     quotes.fetchQuotes(rates_total);
     DEBUG("initializing for %d quotes", rates_total);
-    adx_in.initVars(rates_total, quotes, 0);
+    adx_data.initVars(rates_total, quotes, 0);
   }
   else
   {
-    quotes.fetchQuotes(adx_in.latestQuoteShift() + adx_in.indicatorUpdateShift(rates_total - prev_calculated) + 1);    
-    adx_in.updateVars(quotes, EMPTY, 0);
+    quotes.fetchQuotes(adx_data.latestQuoteShift() + adx_data.indicatorUpdateShift(rates_total - prev_calculated) + 1);    
+    adx_data.updateVars(quotes, EMPTY, 0);
   }
   return rates_total;
 }
 
 void OnDeinit(const int dicode)
 {
-  FREEPTR(adx_in);
+  FREEPTR(adx_data);
   FREEPTR(quotes);
 }

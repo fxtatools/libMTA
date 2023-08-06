@@ -42,11 +42,11 @@ extern const double rvi_scale_d = 1;  // Scale D
 
 #include <../Libraries/libMTA/libRVI.mq4>
 
-RVIIn *rvi_in;
+RVIData *rvi_in;
 
 int OnInit()
 {
-    rvi_in = new RVIIn(rvi_scale_a, rvi_scale_b, rvi_scale_c, rvi_scale_d, rvi_xma_period, _Symbol, _Period);
+    rvi_in = new RVIData(rvi_scale_a, rvi_scale_b, rvi_scale_c, rvi_scale_d, rvi_xma_period, _Symbol, _Period);
 
     //// FIXME update API : initIndicator => bool
     // if(rvi_in.initIndicator()) ...

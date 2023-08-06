@@ -35,11 +35,11 @@ extern const double cci_factor = 0.15;                          // CCI Scale fac
 
 #include <../Libraries/libMTA/libCCI.mq4>
 
-CCIGraph *cci_in;
+CCIData *cci_in;
 
 int OnInit()
 {
-    cci_in = new CCIGraph(cci_mean_period, cci_signal_period, cci_price_mode, cci_factor, _Symbol, _Period);
+    cci_in = new CCIData(cci_mean_period, cci_signal_period, cci_price_mode, cci_factor, _Symbol, _Period);
 
     //// FIXME update API : initIndicator => bool
     // if(cci_in.initIndicator()) ...

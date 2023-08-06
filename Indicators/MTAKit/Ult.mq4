@@ -6,7 +6,7 @@
 
 #property strict
 
-#property description "Ultimate Oscillator"
+#property description "An adaptation of Larry Williams' Ultimate Oscillator"
 
 #property indicator_buffers 1
 #property indicator_color1 clrDodgerBlue
@@ -31,11 +31,11 @@ extern const ENUM_APPLIED_PRICE ult_price_mode = PRICE_CLOSE; // Applied Price
 
 #include <../Libraries/libMTA/libUlt.mq4>
 
-UltOsc *ult;
+UltData *ult;
 
 int OnInit()
 {
-    ult = new UltOsc(ult_period_a, ult_period_b, ult_period_c, ult_scale_a, ult_scale_b, ult_scale_c, ult_price_mode, _Symbol, _Period);
+    ult = new UltData(ult_period_a, ult_period_b, ult_period_c, ult_scale_a, ult_scale_b, ult_scale_c, ult_price_mode, _Symbol, _Period);
  
     //// FIXME update API : initIndicator => bool
     // return ult.initIndicator();

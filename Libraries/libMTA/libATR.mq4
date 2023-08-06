@@ -39,7 +39,7 @@
  * - The following implementation uses units of market price, internally.
  *
  *   The `initialize_atr_points()` method will set the ATR value into the provided data
- *   buffer, using units of points for the `ATRIndicator` as initialized. This is believed
+ *   buffer, using units of points for the `ATRData` as initialized. This is believed
  *   to represent a methodology for establishing a helpful magnitude for values
  *   from ATR calculations in Forex markets.
  *
@@ -52,22 +52,22 @@
  *   update.
  *
  * - The methods `points_to_price()` and `price_to_points()` are provided for
- *   utility in converting point and price values for an `ATRIndicator`.
+ *   utility in converting point and price values for an `ATRData`.
  *
- *   These methods will use the points ratio initialized to the `ATRIndicator`, unless
+ *   These methods will use the points ratio initialized to the `ATRData`, unless
  *   that points ratio is provided as `NULL`, in which case the methods will return
  *   the input value without mathematical translation.
  *
- * - If the `ATRIndicator` is being initialized for a market symbol other than the
- *   current symbol, the constructor `ATRIndicator(int ema_period, const double points)`
+ * - If the `ATRData` is being initialized for a market symbol other than the
+ *   current symbol, the constructor `ATRData(int ema_period, const double points)`
  *   should be used. Provided with the points ratio for the other market symbol,
  *   this should serve to ensure a correct translation of price values to points
  *   values and conversely.
  *
- *   Otherwise, the constructor `ATRIndicator(int ema_period)` may be sufficient.
+ *   Otherwise, the constructor `ATRData(int ema_period)` may be sufficient.
  *
- * - To initialize an `ATRIndicator` without price-to-points conversion, call the
- *   constructor `ATRIndicator(int ema_period, const double points)` with a `NULL`
+ * - To initialize an `ATRData` without price-to-points conversion, call the
+ *   constructor `ATRData(int ema_period, const double points)` with a `NULL`
  *   value for `points`.
  *
  * - For purpose of relative precision in calculation, these methods will not
@@ -88,56 +88,56 @@
  *   calculation
  *
  */
-class ATRIndicator : public PriceIndicator
+class ATRData : public PriceIndicator
 {
 protected:
     const int ema_shifted_period;
 
     // for the ADX Avg implementation
-    ATRIndicator(const int _price_mode,
-                 const string _symbol = NULL,
-                 const int _timeframe = EMPTY,
-                 const string _name = "ATR",
-                 const int _nr_buffers = 1) : ema_period(0),
-                                              ema_shift(0),
-                                              ema_shifted_period(0),
-                                              indicator_points(false),
-                                              price_mode(_price_mode),
-                                              PriceIndicator(_name, _nr_buffers, _symbol, _timeframe)
+    ATRData(const int _price_mode,
+             const string _symbol = NULL,
+             const int _timeframe = EMPTY,
+             const string _name = "ATR",
+             const int _nr_buffers = 1) : ema_period(0),
+                                          ema_shift(0),
+                                          ema_shifted_period(0),
+                                          indicator_points(false),
+                                          price_mode(_price_mode),
+                                          PriceIndicator(_name, _nr_buffers, _symbol, _timeframe)
     {
         atr_buffer = price_mgr.primary_buffer;
     };
 
 public:
-    const int ema_period; // ATR MA period 
-    const int ema_shift; // EMA shift (FIXME no longer used)
-    const int price_mode; // Price mode for True Range
+    const int ema_period;        // ATR MA period
+    const int ema_shift;         // EMA shift (FIXME no longer used)
+    const int price_mode;        // Price mode for True Range
     const bool indicator_points; // Boolean flag for ATR indicator
 
     PriceBuffer *atr_buffer;
 
-    ATRIndicator(const int _ema_period,
-                 const int _ema_shift = 1,
-                 const int _price_mode = PRICE_CLOSE,
-                 const bool use_points = false,
-                 const string _symbol = NULL,
-                 const int _timeframe = EMPTY,
-                 const string _name = "ATR++",
-                 const int _data_shift = EMPTY,
-                 const int _nr_buffers = 1) : ema_period(_ema_period),
-                                              ema_shift(_ema_shift),
-                                              ema_shifted_period(_ema_period - _ema_shift),
-                                              price_mode(_price_mode),
-                                              indicator_points(use_points),
-                                              PriceIndicator(_name, 
-                                              _nr_buffers, 
-                                              _symbol, 
-                                              _timeframe,
-                                              _data_shift == EMPTY ? ema_period + 1 : _data_shift)
+    ATRData(const int _ema_period,
+             const int _ema_shift = 1,
+             const int _price_mode = PRICE_CLOSE,
+             const bool use_points = false,
+             const string _symbol = NULL,
+             const int _timeframe = EMPTY,
+             const string _name = "ATR++",
+             const int _data_shift = EMPTY,
+             const int _nr_buffers = 1) : ema_period(_ema_period),
+                                          ema_shift(_ema_shift),
+                                          ema_shifted_period(_ema_period - _ema_shift),
+                                          price_mode(_price_mode),
+                                          indicator_points(use_points),
+                                          PriceIndicator(_name,
+                                                         _nr_buffers,
+                                                         _symbol,
+                                                         _timeframe,
+                                                         _data_shift == EMPTY ? ema_period + 1 : _data_shift)
     {
         atr_buffer = price_mgr.primary_buffer;
     };
-    ~ATRIndicator()
+    ~ATRData()
     {
         // base class dtor should free the buffer manager & buffers
         atr_buffer = NULL;
@@ -208,15 +208,15 @@ public:
         // fill SMA for ATR EMA
         double atr_sum = initial_atr;
         int off = 1;
-        while(off < ema_period)
+        while (off < ema_period)
         {
-          const int ndx = idx--;
-          const double iatr_pre = atr_sum / off++;
-          const double trange = trueRange(ndx, price_mode, open, high, low, close);
-          const double iatr = (iatr_pre + trange) /off;
-          DEBUG(indicatorName() + " Initial ATR MA [%d] %f", ndx, iatr);
-          atr_buffer.set(ndx, indicator_points ? pricePoints(iatr) : iatr);
-          atr_sum += iatr;
+            const int ndx = idx--;
+            const double iatr_pre = atr_sum / off++;
+            const double trange = trueRange(ndx, price_mode, open, high, low, close);
+            const double iatr = (iatr_pre + trange) / off;
+            DEBUG(indicatorName() + " Initial ATR MA [%d] %f", ndx, iatr);
+            atr_buffer.set(ndx, indicator_points ? pricePoints(iatr) : iatr);
+            atr_sum += iatr;
         }
         atr_buffer.setState(atr_sum / ema_period);
         return idx + 2;
@@ -225,14 +225,18 @@ public:
     virtual void calcMain(const int idx, /* const double prev_price, */ const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
     {
         double pre_sum = DBLZERO; // sum of stored ATR for ema_period - 1;
-        for (int n = 1; n < ema_period; n++) {
-          const double pre = atr_buffer.get(idx + n);
-          DEBUG("ATR MA previous [%d] %f", idx + n, pre);
-          if (pre == EMPTY_VALUE) {
-            printf("%s: ATR MA undefined at %d", indicatorName(), idx + n);
-          } else {
-            pre_sum+= indicator_points ? pointsPrice(pre) : pre;
-          }  
+        for (int n = 1; n < ema_period; n++)
+        {
+            const double pre = atr_buffer.get(idx + n);
+            DEBUG("ATR MA previous [%d] %f", idx + n, pre);
+            if (pre == EMPTY_VALUE)
+            {
+                printf("%s: ATR MA undefined at %d", indicatorName(), idx + n);
+            }
+            else
+            {
+                pre_sum += indicator_points ? pointsPrice(pre) : pre;
+            }
         }
         /// Wilder's ATR EMA, cf. Investopedia refs
         const double tr_cur = trueRange(idx, price_mode, open, high, low, close);

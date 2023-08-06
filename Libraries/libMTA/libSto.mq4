@@ -57,7 +57,7 @@ double stoK(const int idx,
     return (p - l) / (h - l) * scale;
 }
 
-class STOIn : public PriceIndicator
+class StoData : public PriceIndicator
 {
 protected:
     PriceBuffer *k_buf; // STO buffer
@@ -71,7 +71,7 @@ public:
     const int period_d_slow;
     const int price_mode;
 
-    STOIn(const int k = 14,
+    StoData(const int k = 14,
           const int d = 3,
           const int d_slow = 3,
           const int _price_mode = PRICE_CLOSE,
@@ -91,7 +91,7 @@ public:
         d_slow_buf = d_buf.next();
         xover = new PriceXOver();
     }
-    ~STOIn()
+    ~StoData()
     {
         // buffer deletion is managed under the buffer manager protocol
         k_buf = NULL;
