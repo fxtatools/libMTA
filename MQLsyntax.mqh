@@ -8,12 +8,28 @@
 // via
 // https://www.mql5.com/en/forum/222553/page3#comment_6719227
 
-// Formal reference:
+// Formal Reference:
 //
 // - Function Names
 //   MQL4 https://docs.mql4.com/function_indices
 //   MQL5 https://www.mql5.com/en/docs/function_indices
 //
+// Usage Notes:
+//
+// Enum type names, when defined here as prefixed with "_",
+// are not defined in the MetaTrader platform. These are defined
+// here as a convention for use with function prototypes.
+//
+// The following represents only a subset of types, constants,
+// and functions defined in MQL4.
+//
+// This file is provided as a utility for MQL4 source editing 
+// using C++ editor tools.
+//
+// This does not provide a complete support for the syntax and 
+// semantic conventions of the the MQL4 programming language.
+// 
+
 
 #ifndef _MQL_SYNTAX_
 #define _MQL_SYNTAX_ 1
@@ -37,17 +53,16 @@ ENUM_POINTER_TYPE CheckPointer(void *ptr){};
  * String Functions (FIXME C++ toolchain interation for editor tools)
  **/
 
+//// Preprocessor hacks for C++ Compatibility
+
 // #define StringFormat(s, ...) std::format(s, __VA_ARGS__)
-//// HACK:
 #define StringFormat(s, ...) s
 
 // #define Print(...) std::cout << __VA_ARGS__
-//// HACK:
 #define Print(...) __VA_ARGS__
 
 #define PrintFormat(s, ...) printf(s, __VA_ARGS__)
 
-//// HACK:
 #define Alert(...) Print(__VA_ARGS__)
 
 /**
@@ -500,7 +515,7 @@ enum _ORDER_TYPE OrderType();
  * Mathematical Operations
  **/
 
-double fmod(double divident, double divisor);
+double fmod(double dividend, double divisor);
 double fabs(double value);
 double ceil(double value);
 double floor(double value);
