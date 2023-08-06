@@ -552,7 +552,6 @@ enum ENUM_MA_METHOD
     MODE_LWMA
 };
 
-// FIXME testing with iADXWilder ...
 enum _ADX_MODE
 {
     MODE_MAIN,
