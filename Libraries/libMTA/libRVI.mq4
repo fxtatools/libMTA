@@ -211,64 +211,25 @@ public:
         // - when nr crossovers < SMA period, use nr crossovers
         const double rvi_pre = rvi_buf.get(idx + 1);
         const double s_pre = rvi_signal_buf.get(idx + 1);
-        double xop = false;
-        double bearish = EMPTY_VALUE;
+        bool bearish = false;
 
         if (s_pre > rvi_pre && s < rvi)
         {
             bearish = true;
         }
-        else if (s_pre < rvi_pre && s > rvi)
+        else if (!(s_pre < rvi_pre && s > rvi))
         {
-            bearish = false;
-        }
-        else
-        {
-            // ... for section plot:
-            xma_buf.setState(EMPTY_VALUE);
-            // ... for histogram plot:
+          // ... for section plot:
+          xma_buf.setState(EMPTY_VALUE);
+          // ... for histogram plot:
             // xma_buf.setState(xma_buf.get(idx + 1));
-            return;
+          return;
         }
-        // TBD
+
         const datetime t = offset_time(idx, symbol, timeframe);
         const datetime t_pre = offset_time(idx + 1, symbol, timeframe);
         xover.bind(rvi, rvi_pre, s, s_pre, t, t_pre);
 
-        // shortcut ...
-        /*
-        xma_buf.setState(xover.rate());
-        return;
-        */
-
-        // TBD
-        /*
-        double ma = xover.rate();
-        const int ext = price_mgr.extent;
-        double count = 1;
-        for (int n = idx; n < ext && count < xma_period; n++)
-        {
-            const double val = xma_buf.get(n);
-            if (val != EMPTY_VALUE)
-            {
-                ma += val;
-                count++;
-            }
-        }
-        if (count > 0)
-        {
-            ma /= count;
-        }
-        ma /= count;
-        */
-        // xma_buf.setState(ma * 10);
-
-        // FIXME store the actual value at crossover in one buffer.
-        // For display, store an MA of the average of:
-        // - value at crossover
-        // - value at previous RVI extent 
-
-        /* alt (not as smoothed) */
         double pre = EMPTY_VALUE;
         const int ext = price_mgr.extent;
         for (int n = idx + 1; n < ext; n++)
