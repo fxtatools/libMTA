@@ -427,10 +427,12 @@ public:
         }
         else
         {
-            /// original method of calculation
+            //// original method of calculation
             // const double dx = fabs((plus_di - minus_di) / di_sum) * 100.0;
-            /// skpping DX for now
-            const double dx = EMPTY_VALUE;
+            /// alternately, a down-scaled representation for DX 
+            /// as factored from a percentage-scaled DI
+            const double dx = 100.0 - (100.0 / (1.0 + fabs((plus_di - minus_di) / di_sum)));
+            DEBUG(indicator_name() + " DX [%d] %s : %f", idx, offset_time_str(idx), dx);
             dx_buffer.setState(dx);
         }
     };
