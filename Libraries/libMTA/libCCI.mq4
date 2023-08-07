@@ -87,8 +87,10 @@ public:
         const double sd = sdev(mean_period, price_mode, open, high, low, close, idx, m);
         DEBUG("CCI SDev at %d: %f", idx, sd);
         const double p = price_for(idx, price_mode, open, high, low, close);
-        // TBD: the actual value of the CCI factor may seem immaterial in this indicator
-        // - tested with default value and the value 10.0, no visible change in the indicator
+        if (dblZero(sd)) {
+            cci_data.setState(DBLZERO);
+            return;
+        }
         const double cci = (p - m) / (sd * (cci_factor / marketDigits()));
         cci_data.setState(cci);
     }
