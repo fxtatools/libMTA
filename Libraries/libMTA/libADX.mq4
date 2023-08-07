@@ -88,6 +88,109 @@ protected:
         return true;
     }
 
+    int recordReversals(const int idx) {
+        /// Implementation Notes:
+        //
+        // - In order to detect immediate inter-crossover reversals
+        //   before the next +DI/-DI crossover emerges, this will
+        //   backtrack to the previous +DI/-DI crossover, after
+        //   any intermediate crossover or when idx == 0
+        //
+        // - In this method's present implementation, only reversals
+        //   in the prevailing +DI/-DI rate will be analyzed here.
+        //   This is a known limitation.
+        //   It may suffice at least for prototyping
+
+        const int previous_shift = iBarShift(symbol, timeframe, previous_xover);
+
+        const datetime farthest_dt = (idx == 0 && previous_shift != 0) ? previous_xover : earlier_xover;
+
+        if (farthest_dt == EMPTY_VALUE)
+        {
+            return 0;
+        }
+
+        double rate_far = DBLZERO;  // rate of the gaining trend line, before reversal
+        double rate_mid = DBLZERO;  // rate of the gaining trend line, at reversal
+        double rate_near = DBLZERO; // rate of the gaining trend line, after reversal
+        double rate_opp = DBLZERO;  // rate of the opposing trend line, at reversal
+
+        double sum_gain = DBLZERO; // sum of the adjusted rates at reversal for the gaining trend line
+        int n_gain = 0;            // number of reversals in the gaining trend line
+
+        const int xover_shift = iBarShift(symbol, timeframe, farthest_dt);
+        const double xover_rate = xbuff.get(xover_shift);
+        const bool bearish = minus_di_buffer.get(xover_shift) > plus_di_buffer.get(xover_shift);
+
+        DEBUG("Detecting " + (bearish ? "-DI" : "+DI") + " reversals [" + TimeToStr(farthest_dt) + ", " + offset_time_str(idx) + "]"); // DEBUG
+
+        for (int far_predx = xover_shift; far_predx > idx; far_predx--)
+        {
+            const int mid_predx = far_predx - 1;
+            if (mid_predx == idx)
+            {
+                break;
+            }
+            const int predx = mid_predx - 1;
+
+            // DEBUG("rev detect far %d, mid %d, near %d", far_predx, mid_predx, predx);
+            if (bearish)
+            {
+                rate_far = minus_di_buffer.get(far_predx);
+                rate_mid = minus_di_buffer.get(mid_predx);
+                rate_near = predx == idx ? minus_di_buffer.getState() : minus_di_buffer.get(predx);
+                rate_opp = plus_di_buffer.get(mid_predx);
+            }
+            else
+            {
+                rate_far = plus_di_buffer.get(far_predx);
+                rate_mid = plus_di_buffer.get(mid_predx);
+                rate_near = predx == idx ? plus_di_buffer.getState() : plus_di_buffer.get(predx);
+                rate_opp = minus_di_buffer.get(mid_predx);
+            }
+            if (rate_far == EMPTY_VALUE || rate_mid == EMPTY_VALUE || rate_near == EMPTY_VALUE)
+            {
+                DEBUG("Reversal detection not available at %d, %d, %d (%f, %f, %f) to " + offset_time_str(predx, symbol, timeframe), predx, mid_predx, far_predx, rate_near, rate_mid, rate_far); // DEBUG
+                continue;
+            }
+            DEBUG("%f, %f, %f to " + offset_time_str(predx, symbol, timeframe), rate_far, rate_mid, rate_near);
+            if (rate_far <= rate_mid && rate_mid >= rate_near)
+            // ^ because operator overloading (??) this expression did not evaluate
+            // as expected in MT4, with simply the following:
+            //  rate_far <= rate_mid >= rate_near
+            {
+                // weighting for most recent, in the stored value for the rate reversal
+                const double gain_rate = (rate_far + (2.0 * rate_mid) + (3.0 * rate_near)) / 6;
+                // rebuff.set(mid_predx, gain_rate);
+                const double gain_diff = gain_rate - xover_rate;
+                // const double opp_diff = 2.0 * (xover_rate - rate_opp); // weighted?
+                const double opp_diff = (xover_rate - rate_opp); // weighted?
+                //// geometric sum of the gain-xover difference and weighted xover-opposing difference
+                const double adj_rate = sqrt(pow(gain_diff, 2) + pow(opp_diff, 2));
+
+                /// a reversal in the gainining trend line generally indicates
+                /// a loss of strength in the gaining trend.
+                ///
+                /// For +DI reversals, indicating it on the "up" scale.
+                /// For -DI reversals, indicating it on the "down" scale.
+                ///
+                /// This feature in itself does not illustrate the scale
+                /// of the loss of strength in the gaining trend
+                const double signum = bearish ? 1.0 : -1.0;
+
+                /// linear translation by rate at crossover
+                const double p = (signum * adj_rate) + xover_rate ;
+
+                rebuff.set(predx, EMPTY_VALUE);
+                rebuff.set(mid_predx, p); 
+                DEBUG((bearish ? "-DI" : "+DI") + " Reversal detected at " + offset_time_str(mid_predx));
+                n_gain++;
+                sum_gain += p; // FIXME apply
+            }
+        }
+        return n_gain;
+    }
+
 public:
     // Implementation Notes:
     // - designed for application onto MT4 time-series data
@@ -495,99 +598,9 @@ public:
 
         const bool xover = recordCrossover(idx);
         const bool detect_reversal = (xover || idx == 0);
-        if (!detect_reversal)
+        if (detect_reversal)
         {
-            return;
-        }
-
-        /// Implementation Notes:
-        //
-        // - In order to detect immediate inter-crossover reversals
-        //   before the next +DI/-DI crossover emerges, this will
-        //   backtrack to the previous +DI/-DI crossover, after
-        //   any intermediate crossover or when idx == 0
-        //
-        // - In this method's present implementation, only reversals
-        //   in the prevailing +DI/-DI rate will be analyzed here.
-        //   This is a known limitation.
-        //   It may suffice at least for prototyping
-
-        const int previous_shift = iBarShift(symbol, timeframe, previous_xover);
-
-        const datetime farthest_dt = (idx == 0 && previous_shift != 0) ? previous_xover : earlier_xover;
-
-        if (farthest_dt == EMPTY_VALUE)
-        {
-            return;
-        }
-
-        double rate_far = DBLZERO;  // rate of the gaining trend line, before reversal
-        double rate_mid = DBLZERO;  // rate of the gaining trend line, at reversal
-        double rate_near = DBLZERO; // rate of the gaining trend line, after reversal
-        double rate_opp = DBLZERO;  // rate of the opposing trend line, at reversal
-
-        double sum_gain = DBLZERO; // sum of the adjusted rates at reversal for the gaining trend line
-        int n_gain = 0;            // number of reversals in the gaining trend line
-
-        const int xover_shift = iBarShift(symbol, timeframe, farthest_dt);
-        const double xover_rate = xbuff.get(xover_shift);
-        const bool bearish = minus_di_buffer.get(xover_shift) > plus_di_buffer.get(xover_shift);
-
-        DEBUG("Detecting " + (bearish ? "-DI" : "+DI") + " reversals [" + TimeToStr(farthest_dt) + ", " + offset_time_str(idx) + "]"); // DEBUG
-
-        for (int far_predx = xover_shift; far_predx > idx; far_predx--)
-        {
-            const int mid_predx = far_predx - 1;
-            if (mid_predx == idx)
-            {
-                break;
-            }
-            const int predx = mid_predx - 1;
-
-            // DEBUG("rev detect far %d, mid %d, near %d", far_predx, mid_predx, predx);
-            if (bearish)
-            {
-                rate_far = minus_di_buffer.get(far_predx);
-                rate_mid = minus_di_buffer.get(mid_predx);
-                rate_near = predx == idx ? minus_di_buffer.getState() : minus_di_buffer.get(predx);
-                rate_opp = plus_di_buffer.get(mid_predx);
-            }
-            else
-            {
-                rate_far = plus_di_buffer.get(far_predx);
-                rate_mid = plus_di_buffer.get(mid_predx);
-                rate_near = predx == idx ? plus_di_buffer.getState() : plus_di_buffer.get(predx);
-                rate_opp = minus_di_buffer.get(mid_predx);
-            }
-            if (rate_far == EMPTY_VALUE || rate_mid == EMPTY_VALUE || rate_near == EMPTY_VALUE)
-            {
-                DEBUG("Reversal detection not available at %d, %d, %d (%f, %f, %f) to " + offset_time_str(predx, symbol, timeframe), predx, mid_predx, far_predx, rate_near, rate_mid, rate_far); // DEBUG
-                continue;
-            }
-            DEBUG("%f, %f, %f to " + offset_time_str(predx, symbol, timeframe), rate_far, rate_mid, rate_near);
-            if (rate_far <= rate_mid && rate_mid >= rate_near)
-            // ^ because operator overloading (??) this expression did not evaluate
-            // as expected in MT4, with simply the following:
-            //  rate_far <= rate_mid >= rate_near
-            {
-                // weighting for most recent, in the stored value for the rate reversal
-                const double gain_rate = (rate_far + (2.0 * rate_mid) + (3.0 * rate_near)) / 6;
-                // rebuff.set(mid_predx, gain_rate);
-                const double gain_diff = gain_rate - xover_rate;
-                const double opp_diff = 2.0 * (xover_rate - rate_opp); // weighted?
-                //// geometric sum of the gain-xover difference and weighted xover-opposing difference
-                const double adj_rate = sqrt(pow(gain_diff, 2) + pow(opp_diff, 2));
-                const double signum = bearish ? -1.0 : 1.0;
-                const double p = signum * adj_rate;
-
-                rebuff.set(predx, EMPTY_VALUE);
-                //// temporarily deactivated, while evaluating MA methods for ADX
-                // rebuff.set(mid_predx, p); 
-                rebuff.set(far_predx, EMPTY_VALUE);
-                DEBUG((bearish ? "-DI" : "+DI") + " Reversal detected at " + offset_time_str(mid_predx));
-                n_gain++;      // FIXME apply
-                sum_gain += p; // FIXME apply
-            }
+            recordReversals(idx);
         }
     };
 
@@ -611,12 +624,6 @@ public:
         SetIndexLabel(idx, "DX");
         SetIndexStyle(idx++, DRAW_LINE);
 
-        const bool draw_atr = debug;
-        // const bool draw_atr = true;
-        SetIndexBuffer(idx, atr_buffer.data, draw_atr ? INDICATOR_DATA : INDICATOR_CALCULATIONS);
-        SetIndexLabel(idx, draw_atr ? "DX ATR" : NULL);
-        SetIndexStyle(idx++, draw_atr ? DRAW_LINE : DRAW_NONE);
-
         SetIndexBuffer(idx, xbuff.data);
         SetIndexLabel(idx, "XR"); // rate at crossover
         SetIndexStyle(idx++, DRAW_SECTION);
@@ -624,6 +631,11 @@ public:
         SetIndexBuffer(idx, rebuff.data);
         SetIndexLabel(idx, "Rev"); // adjusted rate at reversal
         SetIndexStyle(idx++, DRAW_SECTION);
+
+        const bool draw_atr = debug; 
+        SetIndexBuffer(idx, atr_buffer.data, draw_atr ? INDICATOR_DATA : INDICATOR_CALCULATIONS);
+        SetIndexLabel(idx, draw_atr ? "DX ATR" : NULL);
+        SetIndexStyle(idx++, draw_atr ? DRAW_LINE : DRAW_NONE);
 
         // non-drawn buffers
 
