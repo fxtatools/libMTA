@@ -21,6 +21,14 @@ protected:
 public:
     datetime latest_quote_dt;
 
+    // FIXME update API : initIndicator => bool
+    // mainly factored onto the return value from
+    // IndicatorBuffers() in implementations
+
+    // FIXME provide a constant display_name field,
+    // initializing in ctor then using in the default
+    // indicatorName() method
+
     PriceIndicator(const string _name,
                    const int _nr_buffers,
                    const string _symbol = NULL,

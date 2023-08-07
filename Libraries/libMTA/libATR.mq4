@@ -218,7 +218,9 @@ public:
             }
         }
         lwma /= weights;
-        atr_buffer.setState(lwma);
+        const double pre = atr_buffer.getState();
+        const double curema = ema(pre, lwma, ema_period - ema_shift);
+        atr_buffer.setState(curema);
         DEBUG(indicatorName() + " ATR: New ATR [%d] %f", idx, lwma);
     };
 
