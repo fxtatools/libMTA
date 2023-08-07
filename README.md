@@ -2,13 +2,13 @@ libMTA: Technical Analysis Tools for MetaTrader4 Platforms
 ==========================================================
 
 
-Availability: [GitHub](https://github.com/fxtatools/libMTA/)
+Availability: [fxtatools/libMTA at GitHub](https://github.com/fxtatools/libMTA/)
 
 ## Installation
 
-The following walkthrough will illustrate how to create a Git repository in the MQL4 source directory, then checking out these sources into that directory.
+The following walkthrough will illustrate how to create a Git repository in the MQL4 source directory, then checking out the libMTA sources into that directory.
 
-**Known Limitations:** This approach may represent something of a crude method for installation, as it would permit exactly one project at any one time, in the MQL4 source directory.
+**Known Limtiation:** This approach may represent something of a crude method for installation, as it would permit exactly one project at any one time, in the MQL4 source directory.
 
 ### Git
 
@@ -20,7 +20,7 @@ MSYS2 can be installed on Microsoft Windows platforms using the [Chocolatey pack
 
 ### Locating the MQL4 Directory
 
-An individual FX trading broker will often provide a customized build of the [MetaTrader4](https://www.metatrader4.com/) platform. This can typically be located by searching for "metatrader4" within pages at the broker's web site.
+An individual FX trading broker will often provide a customied build of the [MetaTrader4](https://www.metatrader4.com/) platform. This can typically be located by searching for "metatrader4" within pages at the broker's web site.
 
 Once the MetaTrader4 client terminal is installed, the MetaEditor GUI can be started from within the MetaTrader4 terminal. This GUI will provide an interface to the MQL4 compiler, for building these source files for use with MetaTrader4.
 
@@ -72,7 +72,7 @@ Using VS Code, additional VS Code extensions may be installed with nicholishen's
 
 For C++ compiler support in VS Code, this project uses clang as installed with MSYS2 (referred above).
 
-Intellisense is available for VS Code installations on Microsoft Windows, and may be available on other platforms supported by VS Code.
+Intellisense is available for VS Code installations on Microsoft Windows, and may be avaialble on other platforms supported by VS Code.
 
 ## "To Do"
 

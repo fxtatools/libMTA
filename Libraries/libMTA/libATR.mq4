@@ -95,15 +95,15 @@ protected:
 
     // for the ADX Avg implementation
     ATRData(const int _price_mode,
-             const string _symbol = NULL,
-             const int _timeframe = EMPTY,
-             const string _name = "ATR",
-             const int _nr_buffers = 1) : ema_period(0),
-                                          ema_shift(0),
-                                          ema_shifted_period(0),
-                                          indicator_points(false),
-                                          price_mode(_price_mode),
-                                          PriceIndicator(_name, _nr_buffers, _symbol, _timeframe)
+            const string _symbol = NULL,
+            const int _timeframe = EMPTY,
+            const string _name = "ATR",
+            const int _nr_buffers = 1) : ema_period(0),
+                                         ema_shift(0),
+                                         ema_shifted_period(0),
+                                         indicator_points(false),
+                                         price_mode(_price_mode),
+                                         PriceIndicator(_name, _nr_buffers, _symbol, _timeframe)
     {
         atr_buffer = price_mgr.primary_buffer;
     };
@@ -117,23 +117,23 @@ public:
     PriceBuffer *atr_buffer;
 
     ATRData(const int _ema_period,
-             const int _ema_shift = 1,
-             const int _price_mode = PRICE_CLOSE,
-             const bool use_points = false,
-             const string _symbol = NULL,
-             const int _timeframe = EMPTY,
-             const string _name = "ATR++",
-             const int _data_shift = EMPTY,
-             const int _nr_buffers = 1) : ema_period(_ema_period),
-                                          ema_shift(_ema_shift),
-                                          ema_shifted_period(_ema_period - _ema_shift),
-                                          price_mode(_price_mode),
-                                          indicator_points(use_points),
-                                          PriceIndicator(_name,
-                                                         _nr_buffers,
-                                                         _symbol,
-                                                         _timeframe,
-                                                         _data_shift == EMPTY ? ema_period + 1 : _data_shift)
+            const int _ema_shift = 1,
+            const int _price_mode = PRICE_CLOSE,
+            const bool use_points = false,
+            const string _symbol = NULL,
+            const int _timeframe = EMPTY,
+            const string _name = "ATR++",
+            const int _data_shift = EMPTY,
+            const int _nr_buffers = 1) : ema_period(_ema_period),
+                                         ema_shift(_ema_shift),
+                                         ema_shifted_period(_ema_period - _ema_shift),
+                                         price_mode(_price_mode),
+                                         indicator_points(use_points),
+                                         PriceIndicator(_name,
+                                                        _nr_buffers,
+                                                        _symbol,
+                                                        _timeframe,
+                                                        _data_shift == EMPTY ? ema_period : _data_shift)
     {
         atr_buffer = price_mgr.primary_buffer;
     };
@@ -155,95 +155,71 @@ public:
         return 1;
     };
 
-    virtual void storeState(const int idx)
-    {
-        // This indicator uses only one buffer, storing a
-        // price value for internal state. The price value
-        // may need to be converted to points here,
-        // corresponding to storage in the indicator data
-        // array.
-        //
-        // Derived indicators may use more than one buffer,
-        // so there is this indirection in the base class.
-        //
-        PriceIndicator::storeState(idx);
-        if (indicator_points)
-        {
-            // remap the transferred ATR data
-            const double price = atr_buffer.getState();
-            atr_buffer.data[idx] = pricePoints(price);
-        }
-    };
 
-    virtual void restoreState(const int idx)
-    {
-        // see notes in store_state()
-        PriceIndicator::restoreState(idx);
-        if (indicator_points)
-        {
-            // remap the transferred ATR data
-            const double points = atr_buffer.data[idx];
-            atr_buffer.setState(pointsPrice(points));
-        }
-    };
-
-    // was double initial_atr_price
     virtual int calcInitial(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
     {
         // calculate mean of True Range for first ATR
         int idx = _extent - 1;
-        double trange_sum = high[idx] - low[idx];
-        idx--;
-        DEBUG(indicatorName() + " Initial True Range sum [%d] %f", idx, trange_sum);
-        for (int n = 1; n < ema_period; n++)
-        {
-            trange_sum += trueRange(idx--, price_mode, open, high, low, close);
-            DEBUG(indicatorName() + " Initial True Range sum [%d] %f", idx, trange_sum);
+        double wsum = high[idx] - low[idx];
+        if (indicator_points) {
+            wsum = pricePoints(wsum);
         }
-        const double initial_atr = trange_sum / ema_period;
-        DEBUG(indicatorName() + " Initial ATR [%d] %f", idx, initial_atr);
-        atr_buffer.setState(initial_atr);
-        atr_buffer.set(idx--, indicator_points ? pricePoints(initial_atr) : initial_atr);
-
-        // fill SMA for ATR EMA
-        double atr_sum = initial_atr;
-        int off = 1;
-        while (off < ema_period)
+        atr_buffer.setState(wsum);
+        atr_buffer.set(idx);
+        DEBUG(indicatorName() + " ATR: Initial True Range sum [%d] %f", idx + 1, wsum);
+        //// initialize the series calculation for volume-weighted mean
+        double weights = (double) volume[idx--];
+        wsum *= weights;
+        //// calcualte initial volume-weighted mean calculation for ATR
+        for (int n = 2; n < ema_period; n++)
         {
             const int ndx = idx--;
-            const double iatr_pre = atr_sum / off++;
-            const double trange = trueRange(ndx, price_mode, open, high, low, close);
-            const double iatr = (iatr_pre + trange) / off;
-            DEBUG(indicatorName() + " Initial ATR MA [%d] %f", ndx, iatr);
-            atr_buffer.set(ndx, indicator_points ? pricePoints(iatr) : iatr);
-            atr_sum += iatr;
+            const double cur = trueRange(ndx, price_mode, open, high, low, close);
+            const double cadj = indicator_points ? pricePoints(cur) : cur;
+            const double vol = (double) volume[ndx];
+            weights += vol;
+            wsum += (cadj * vol) ;
+            const double mean = wsum / weights;
+            atr_buffer.setState(mean);
+            atr_buffer.set(idx);
+            DEBUG(indicatorName() + " ATR: Initial True Range Current, Mean [%d] %f, %f", ndx, cadj, mean);
+        }       
+        // fill for ATR EMA, using calcMain()
+        for (int n = 0; n < ema_period; n++, idx--) {
+             DEBUG(indicatorName() + " ATR: Fill EMA to %d", idx);
+             ATRData::calcMain(idx, open, high, low, close, volume);
+             atr_buffer.set(idx);
         }
-        atr_buffer.setState(atr_sum / ema_period);
-        return idx + 2;
+        // return current idx, as incremented after final idx--
+        return idx + 1;
     };
 
-    virtual void calcMain(const int idx, /* const double prev_price, */ const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
-    {
-        double pre_sum = DBLZERO; // sum of stored ATR for ema_period - 1;
-        for (int n = 1; n < ema_period; n++)
+    /// @brief calculate the current true range and current ATR
+    virtual void calcMain(const int idx, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
+    {    
+        /// preweight the LWMA sum and weights with nearest true range and nearest volume
+        const double cur = trueRange(idx, price_mode, open, high, low, close);
+        double lwma = indicator_points ? pricePoints(cur) : cur;
+        double weights = (double)volume[idx];
+        lwma *= weights;
+
+        // calculate the volume-weighted LWMA
+        const double ema_period_dbl = (double)ema_period;
+        const int stop = idx + 1; // ! stop before current
+        for (int n = idx + ema_period - 1, p_k = 1; n > stop; n--, p_k++)
         {
-            const double pre = atr_buffer.get(idx + n);
-            DEBUG("ATR MA previous [%d] %f", idx + n, pre);
-            if (pre == EMPTY_VALUE)
+            const double pre = atr_buffer.get(n);
+            if (pre != EMPTY_VALUE)
             {
-                printf("%s: ATR MA undefined at %d", indicatorName(), idx + n);
-            }
-            else
-            {
-                pre_sum += indicator_points ? pointsPrice(pre) : pre;
+                const double wfactor = ((double)p_k / ema_period_dbl) * (double) volume[n];
+                DEBUG(indicatorName() + " ATR: Previous ATR at %d: %f", n, pre);
+                weights += wfactor;
+                lwma += (pre * wfactor);
             }
         }
-        /// Wilder's ATR EMA, cf. Investopedia refs
-        const double tr_cur = trueRange(idx, price_mode, open, high, low, close);
-        const double atr_cur = (pre_sum + tr_cur) / ema_period;
-
-        atr_buffer.setState(atr_cur);
-        DEBUG("New ATR [%d] %f", idx, atr_cur);
+        lwma /= weights;
+        atr_buffer.setState(lwma);
+        DEBUG(indicatorName() + " ATR: New ATR [%d] %f", idx, lwma);
     };
 
     virtual void initIndicator()

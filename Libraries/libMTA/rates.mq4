@@ -143,6 +143,10 @@ public:
         data[idx] = datum;
     };
 
+    void set(const int idx) {
+        data[idx] = getState();
+    }
+
     void setState(const T datum)
     {
         // method definition unusable for RatesBuffer

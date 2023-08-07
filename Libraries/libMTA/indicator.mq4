@@ -67,7 +67,7 @@ public:
         return name;
     };
 
-    // return the current chart shift of the latest quote
+    // return the current chart shift of the nearest quote
     // processed by the indicator
     virtual int latestQuoteShift()
     {
@@ -185,30 +185,26 @@ public:
 
     // run calcMain() and transfer calculation state into each
     // buffer's data arrays
-    virtual datetime updateVars(const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[], const int initial_index = EMPTY, const int padding = EMPTY)
+    virtual datetime updateVars(const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[], const int initial_index = EMPTY, const int padding = EMPTY, const int nearest = 0)
     {
-        // initial_index is used here for purpose of applying this for indicator initialization,
-        // there using the index returned by calcInitial()
-
-        const int __latest__ = 0;
-
-        // some indicators will need to backtrack here
-        // thus the implementation of indicatorUpdateShift()
-        const int update_idx = initial_index == EMPTY ? latestQuoteShift() : initial_index;
+        // some indicators will need to backtrack here,
+        // thus the implementation of latestQuoteShift()
+        const int update_idx = initial_index == EMPTY ? latestQuoteShift() : initial_index; // ! latestQuoteShift() ...
         DEBUG(indicatorName() + " Updating to index %d", update_idx);
         if (update_idx > price_mgr.extent)
         {
             setExtent(update_idx, padding);
         }
 
+        // restore previous calculation state
         restoreState(update_idx + 1);
 
-        for (int idx = update_idx; idx >= __latest__; idx--)
+        for (int idx = update_idx; idx >= nearest; idx--)
         {
             calcMain(idx, open, high, low, close, volume);
             storeState(idx);
         }
-        latest_quote_dt = iTime(symbol, timeframe, __latest__);
+        latest_quote_dt = iTime(symbol, timeframe, nearest);
         return latest_quote_dt;
     };
 
@@ -221,21 +217,31 @@ public:
     // run calcInitial() then storing each buffer's state
     // to the buffer's data array, finally dispatching to
     // updateVars() for the index returned from calcInitial()
-    virtual datetime initVars(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[], const int padding = EMPTY)
+    virtual datetime initVars(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[], const int padding = EMPTY, const int nearest = 0)
     {
         if (!setExtent(_extent, padding))
         {
-            printf("%s: Unable to set initial extent %d", indicatorName(), _extent);
+            printf(indicatorName() + "%s: Unable to set initial extent %d", _extent);
             return EMPTY;
         }
-        DEBUG("%s: Bind intial value in %d", indicatorName(), _extent);
+        DEBUG(indicatorName() + ": Bind intial value in %d", _extent);
         latest_quote_dt = 0;
         const int calc_idx = calcInitial(_extent, open, high, low, close, volume);
-        DEBUG("%s: Initializing data [%d/%d]", indicatorName(), calc_idx, _extent);
+        DEBUG(indicatorName() + ": Initializing data [%d/%d]", calc_idx, _extent);
 
         storeState(calc_idx);
-
-        return updateVars(open, high, low, close, volume, calc_idx - 1, padding);
+        const int next = calc_idx - 1;
+        if (calc_idx >= nearest) {
+            DEBUG(indicatorName() + ": Updating [%d ... %d]", next, nearest);
+            // dispatch to call calcMain() and store state, updating to nearest rate point
+            const datetime dt = updateVars(open, high, low, close, volume, next, padding, nearest);
+            DEBUG(indicatorName() + ": Returning from initVars()");
+            return dt;
+        } else {
+            DEBUG(indicatorName() + ": Initialized to %d at %s", calc_idx, offset_time_str(calc_idx, symbol, timeframe));
+            latest_quote_dt = iTime(symbol, timeframe, calc_idx);
+            return latest_quote_dt;
+        }
     };
 
     // dispatch to initVars() for quote buffers provided by the QuoteMgr

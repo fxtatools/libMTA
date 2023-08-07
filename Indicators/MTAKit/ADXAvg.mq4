@@ -52,14 +52,14 @@ int OnInit()
   
   printf("Initialized avg_buff with %d members, total weight %f, first period %d", avg_buff.n_adx_members, avg_buff.total_weights, avg_buff.longest_period);
   
-  ADXIndicator *iterators[];
-  avg_buff.copyIter(iterators);
+  ADXData *iterators[];
+  avg_buff.copyMember(iterators);
   double out_weights[];
   avg_buff.copyWeights(out_weights);
 
   for(int n = 0; n < avg_buff.n_adx_members; n++) {
     // DEBUG
-    const ADXIndicator *iter = iterators[n];
+    const ADXData *iter = iterators[n];
     const double weight = out_weights[n];
     printf("ADX Iterator [%d] (%d, %d) weight %f", n, iter.ema_period, iter.ema_shift, weight);
   }
