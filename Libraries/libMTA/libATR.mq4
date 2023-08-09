@@ -133,7 +133,7 @@ public:
                                                         _nr_buffers,
                                                         _symbol,
                                                         _timeframe,
-                                                        _data_shift == EMPTY ? ema_period : _data_shift)
+                                                        _data_shift == EMPTY ? _ema_period : _data_shift)
     {
         atr_buffer = price_mgr.primary_buffer;
     };
