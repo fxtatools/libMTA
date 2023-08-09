@@ -243,6 +243,7 @@ public:
         // an indicator may need any additional number of quotes on update,
         // previous to the latest. Thus the handling for updateOffset() here.
         const int count = (nrquotes == EMPTY ? (latestQuoteShift() + 1) : nrquotes);
+        DEBUG("Quote Manager %s, %d: Fetching %d quotes", chartInfo.getSymbol(), chartInfo.getTimeframe(), nrquotes);
         return fetchQuotes(count);
     }
 };

@@ -54,13 +54,24 @@ int OnCalculate(const int rates_total,
 {
   if (prev_calculated == 0)
   {
-    quotes.fetchQuotes(rates_total);
+    if (!quotes.fetchQuotes(rates_total))
+    {
+      printf("Unable to fetch %d quotes for initialization", rates_total);
+      return 0;
+    }
     DEBUG("initializing for %d quotes", rates_total);
     adx_data.initVars(rates_total, quotes, 0);
   }
   else
   {
-    quotes.fetchQuotes(adx_data.latestQuoteShift() + adx_data.indicatorUpdateShift(rates_total - prev_calculated) + 1);    
+    const int nqshift = adx_data.latestQuoteShift();
+    const int inshift = adx_data.indicatorUpdateShift(rates_total - prev_calculated);
+    const int nrquotes = nqshift + inshift ;
+    DEBUG("Fetching %d quotes (latest %d, indicator %d)", nrquotes, nqshift, inshift);
+    if (!quotes.fetchQuotes(nrquotes)) {
+      printf("Unable to fetch %d quotes for udpate", nrquotes);
+      return 0;
+    }
     adx_data.updateVars(quotes, EMPTY, 0);
   }
   return rates_total;
