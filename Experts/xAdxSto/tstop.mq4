@@ -1,20 +1,129 @@
 // simplified prototype for automated trailing stop
 
-// License: BSD License
+// License: MIT License
 // https://spdx.org/licenses/BSD-2-Clause.html
 
 #property strict
 
+extern const long ts_points = 20; // Trailing Stop Points
+extern const long tp_points = 60; // Take Profit Points
+
 #include <stdlib.mqh>
+#include <libMql4.mq4>
 
-extern const double ts_spread_frac = 1.5; // Fraction of spread for Trailing Stop
-// ^ testing with 0.6
-extern const double tp_spread_frac = 4.0; // Fraction of spread for Take Profit
+bool opened_trailing_stop = false;
 
-static const long __tsl_lots__ = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
-static const double __tsl_price__ = NormalizeDouble(__tsl_lots__ * _Point, Digits);
+long pricePoints(const double price)
+{
+    return (long)(price / _Point);
+}
 
-static bool opened_trailing_stop = false;
+double pointsPrice(const long lots)
+{
+    return NormalizeDouble(lots * _Point, Digits);
+}
+
+bool symbolInfo(double &var, const int prop, const string symbol = NULL)
+{
+    return SymbolInfoDouble(symbol == NULL ? _Symbol : symbol, prop, var);
+}
+
+bool symbolInfo(int &var, const int prop, const string symbol = NULL)
+{
+    long tmp;
+    if (SymbolInfoInteger(symbol == NULL ? _Symbol : symbol, prop, tmp))
+    {
+        var = (int)tmp;
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+bool symbolInfo(long &var, const int prop, const string symbol = NULL)
+{
+    return SymbolInfoInteger(symbol == NULL ? _Symbol : symbol, prop, var);
+}
+
+long getStopLots(const string symbol = NULL)
+{
+    // stops value may be zero, at least with some brokers - seen with an Oanda demo account
+    long stops = EMPTY_VALUE;
+    const bool rslt = symbolInfo(stops, SYMBOL_TRADE_STOPS_LEVEL, symbol);
+    if (rslt)
+    {
+        return stops;
+    }
+    else
+    {
+        return EMPTY;
+    }
+}
+
+double getStopPrice(const string symbol = NULL)
+{
+    const long lots = getStopLots(symbol);
+    if (lots == 0)
+    {
+        // broker allows a zero stops range, or no stops level could be determined
+        return 0;
+    }
+    else
+    {
+        return pointsPrice(lots);
+    }
+}
+
+/// @brief return a factored stopoff price, depending on factor and broker limit, both values in points/lot
+//
+/// @param factor [in] configured stopoff factor in units off points (lots, pips),
+//   such as for stop loss, take profit, or trailing stop
+//
+/// @param limit [in] broker limit for stop loss / take profit, in units of points (lots, pips).
+//   This value can be retrieved as via `SymbolInfoInteger(string s, SYMBOL_TRADE_STOPS_LEVEL)`
+//   and other calls to this overloaded function.
+//
+//  @param digits [in] symbol-specific decimal precision for market rates and order prices.
+//  If provided as EMPTY, the current symbol's `Digits` value will be used. This parameter
+//  will be used when normalizing the adjusted `factor` value as converted to units of price.
+//
+// @return the factored stopoff value, converted from points to units of price
+//
+// @par Implementation Notes
+//
+// Some brokers may allow a stops limit of zero. In these instances, this function will
+// convert the `factor` value directly to units of price
+//
+// For brokers using a stops limit greater than zero, this function will endeavor to absorb
+// the stops limt value within the factored portion, when the provided factor is greater than
+// the stops limit.
+//
+// If the stops limit is greater than the provided factor, the stops limit will be returned
+// as converted to points.
+//
+// The value returned from this function may be applied relative to ask price, bid price,
+// or order open price, depending on the nature of the applied stop (e.g take profit,
+// initial stop loss, or trailing stop loss)
+//
+double getStopoff(const long factor, const long limit, int digits = EMPTY)
+{
+    digits = digits == EMPTYU ? Digits : digits;
+    if (limit == 0)
+    {
+        // FIXME assumes current symbol @ Digits
+        return NormalizeDouble(pointsPrice(factor), digits);
+    }
+    else
+    {
+        // Needs test with a broker using a stop 0 < limit < 50
+        //
+        // absorbing the stops limit within the factored portion,
+        // when the factored portion > limit
+        return NormalizeDouble(pointsPrice((long)(MathMax((double)limit, (double)factor - limit))), digits);
+    }
+}
 
 int nextOrder(int &start, const string symbol = NULL, const int pool = MODE_TRADES)
 {
@@ -42,13 +151,26 @@ void handleError(const string message)
     ExpertRemove();
 }
 
+const long __tsl_lots__ = getStopLots(); // stop limit for stopopff calculation
+const double __tsl_price__ = getStopPrice();
+
 void OnTick()
 {
-    if (ts_spread_frac <= 0)
-    {
-        printf("Unsupported fraction for trailing stop: %f", ts_spread_frac);
-        ExpertRemove();
-    }
+    // Implementation Notes:
+    // - For Take Profit, Sell closes on the position of the Ask price
+    //
+    // TA/Market Notes:
+    //
+    // - Market rate slumps or (less often) rate spikes at 0:00 market time
+    //   may be accompanied with an immediate increase in spread, corresponding
+    //   to or greater than the rage change. Consequently, it may be non-trivial
+    //   to "follow" an abrupt 0:00 market rate change.
+    //
+    //   Seen in EURGPB, GPBUSD. Not so much so, in USDJPY
+    //
+    // - When there is a certain gap between current open and previous close
+    //   prices, e.g in an approximate range of 50 to 100 points of a gap, it
+    //   may indicate a recent  "market rate spike"  as such.
 
     int start = 0;
     const int ticket = nextOrder(start, _Symbol);
@@ -77,22 +199,23 @@ void OnTick()
     const double opened_sl = OrderStopLoss();
     const double opened_tp = OrderTakeProfit();
 
-    const double spread_price = Ask - Bid;
-    const double spreadoff = (ts_spread_frac * spread_price) + __tsl_price__;
+    const double tsl_stop = getStopoff(ts_points, __tsl_lots__);
 
-    // TBD using spread_price here? for initial tstop (this too DNW)
-    const double new_sl = NormalizeDouble((opened_trailing_stop ? (opened_sell ? (Ask + spreadoff) : (Bid - spreadoff)) : (opened_sell ? opened_price - spread_price - spreadoff : opened_price + spread_price + spreadoff)), Digits);
+    const double new_sl = NormalizeDouble((opened_trailing_stop ? (opened_sell ? (Ask + tsl_stop) : (Bid - tsl_stop)) : (opened_sell ? (opened_price - tsl_stop) : (opened_price + tsl_stop))), Digits);
 
-    const bool update_stop = (opened_trailing_stop ? (opened_sell ? new_sl < opened_sl : new_sl > opened_sl) : (opened_sell ? Ask < new_sl  : Bid > new_sl ));
+    const bool update_stop = (opened_trailing_stop ? (opened_sell ? ((new_sl < opened_sl) && ((new_sl - Ask) >= __tsl_price__)) : ((new_sl > opened_sl) && ((Bid - new_sl) >= __tsl_price__))) : (opened_sell ? ((new_sl - Ask) >= __tsl_price__) : ((Bid - new_sl) >= __tsl_price__)));
 
+    if (opened_sell ? Ask < opened_price : Bid > opened_price)
+    {
+        DEBUG("Update TS ? ask %f, bid %f, stopoff %f, new_sl %f", Ask, Bid, tsl_stop, new_sl);
+    }
 
     if (update_stop)
     {
-        const double tp_spreadoff = (spread_price * tp_spread_frac) + __tsl_price__;
-        const double new_tp = NormalizeDouble(opened_sell ? Bid - tp_spreadoff : Ask + tp_spreadoff, Digits);
+        const double new_tp = getStopoff(tp_points, __tsl_lots__);
 
-        printf("Updating order (trailing stop) %d : SL %f, TP %f", ticket, new_sl, new_tp);
-        printf("Ask %f, Bid %f, Order opened price %f, spreadoff %f", Ask, Bid, opened_price, spreadoff);
+        printf("Updating order (trailing stop) %d : SL  %f => %f, TP %f => %f", ticket, opened_sl, new_sl, opened_tp, new_tp);
+        printf("Ask %f, Bid %f, TSL %f, TPL %f, Order opened price %f, tsl_stop %f", Ask, Bid, ts_points, tp_points, opened_price, tsl_stop);
         bool modified = OrderModify(ticket, opened_price, new_sl, new_tp, 0, clrNONE);
         if (modified)
         {
