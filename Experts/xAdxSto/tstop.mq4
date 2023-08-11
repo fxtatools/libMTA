@@ -13,9 +13,8 @@ extern const long tp_points = 60; // Take Profit Points
 
 bool opened_trailing_stop = false;
 
-
 /// @brief return the points value (lots, pips) for a value in units of price
-/// @param lots the value in units of price
+/// @param price the value in units of price
 /// @return the points value (lots, pips) for the provided price value
 ///
 /// @par Known Limitations
@@ -96,7 +95,7 @@ long getStopLots(const string symbol = NULL)
 }
 
 /// @brief Return the stops limit in units of price for a given symbol
-/// @param symbol [in] symbol for the stops limit. 
+/// @param symbol [in] symbol for the stops limit.
 //   If NULL, the current symbol will be used
 /// @return the stops limit, in units of price
 double getStopPrice(const string symbol = NULL)
@@ -162,6 +161,19 @@ double getStopoff(const long factor, const long limit, int digits = EMPTY)
     }
 }
 
+/// @brief select the next available order for terminal order information,
+/// and return the order's ticket number, beginning with a provided index value
+///
+/// @param start [in] variable storing the initial start index for orders
+///  within the terminal order system, 0 for the first order
+///
+/// @param symbol symbol to use when checking for open orders, NULL for the current symbol
+///
+/// @param pool enum value indicating the order pool to search for open orders,
+///   default is MODE_TRADES
+///
+/// @return the order ticket number, updating the `start` reference for the selected
+///  order's index. If no matching orders are found, returns EMPTY
 int nextOrder(int &start, const string symbol = NULL, const int pool = MODE_TRADES)
 {
     const string s = symbol == NULL ? _Symbol : symbol;
@@ -181,6 +193,11 @@ int nextOrder(int &start, const string symbol = NULL, const int pool = MODE_TRAD
     return EMPTY;
 }
 
+/// @brief print an error message, error code, and standard error string
+///  and remove this expert advisor
+/// @param message message to be printed to the experts log. This message
+///  will be printed together with the last error code and standard error
+///  string for that error code.
 void handleError(const string message)
 {
     const int errno = GetLastError();
@@ -193,6 +210,7 @@ const long __tsl_lots__ = getStopLots();
 // stop limit in units of price, for next-stop calculation
 const double __tsl_price__ = getStopPrice();
 
+/// @brief Primary EA event function
 void OnTick()
 {
     // Implementation Notes:
