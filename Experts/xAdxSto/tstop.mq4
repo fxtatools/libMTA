@@ -5,7 +5,7 @@
 
 #property strict
 
-extern const long ts_points = 20; // Trailing Stop Points
+extern const long ts_points = 10; // Trailing Stop Points
 extern const long tp_points = 60; // Take Profit Points
 
 #include <stdlib.mqh>
