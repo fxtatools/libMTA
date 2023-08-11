@@ -13,21 +13,46 @@ extern const long tp_points = 60; // Take Profit Points
 
 bool opened_trailing_stop = false;
 
+
+/// @brief return the points value (lots, pips) for a value in units of price
+/// @param lots the value in units of price
+/// @return the points value (lots, pips) for the provided price value
+///
+/// @par Known Limitations
+///
+/// This function is applicable only for the current symbol at time of call
 long pricePoints(const double price)
 {
     return (long)(price / _Point);
 }
 
+/// @brief return the price value for a value in units of points (lots, pips)
+/// @param lots the value in units of points
+/// @return the price value for the provided point value
+////
+/// @par Known Limitations
+///
+/// This function is applicable only for the current symbol at time of call
 double pointsPrice(const long lots)
 {
     return NormalizeDouble(lots * _Point, Digits);
 }
 
+/// @brief Utility function for market symbol information
+/// @param var [out] variable for the symbol info
+/// @param prop [in] property for the symbol info
+/// @param symbol [in] symbol for the symbol info
+/// @return true if the symbol information was available, else false
 bool symbolInfo(double &var, const int prop, const string symbol = NULL)
 {
     return SymbolInfoDouble(symbol == NULL ? _Symbol : symbol, prop, var);
 }
 
+/// @brief Utility function for market symbol information
+/// @param var [out] variable for the symbol info
+/// @param prop [in] property for the symbol info
+/// @param symbol [in] symbol for the symbol info
+/// @return true if the symbol information was available, else false
 bool symbolInfo(int &var, const int prop, const string symbol = NULL)
 {
     long tmp;
@@ -42,14 +67,22 @@ bool symbolInfo(int &var, const int prop, const string symbol = NULL)
     }
 }
 
+/// @brief Utility function for market symbol information
+/// @param var [out] variable for the symbol info
+/// @param prop [in] property for the symbol info
+/// @param symbol [in] symbol for the symbol info
+/// @return true if the symbol information was available, else false
 bool symbolInfo(long &var, const int prop, const string symbol = NULL)
 {
     return SymbolInfoInteger(symbol == NULL ? _Symbol : symbol, prop, var);
 }
 
+/// @brief Return the stops limit in units of points (lots, pips) for a given symbol
+/// @param symbol [in] symbol for the stops limit.
+//   If NULL, the current symbol will be used
+/// @return the stops limit, in units of points (lots, pips)
 long getStopLots(const string symbol = NULL)
 {
-    // stops value may be zero, at least with some brokers - seen with an Oanda demo account
     long stops = EMPTY_VALUE;
     const bool rslt = symbolInfo(stops, SYMBOL_TRADE_STOPS_LEVEL, symbol);
     if (rslt)
@@ -62,6 +95,10 @@ long getStopLots(const string symbol = NULL)
     }
 }
 
+/// @brief Return the stops limit in units of price for a given symbol
+/// @param symbol [in] symbol for the stops limit. 
+//   If NULL, the current symbol will be used
+/// @return the stops limit, in units of price
 double getStopPrice(const string symbol = NULL)
 {
     const long lots = getStopLots(symbol);
@@ -151,7 +188,9 @@ void handleError(const string message)
     ExpertRemove();
 }
 
-const long __tsl_lots__ = getStopLots(); // stop limit for stopopff calculation
+// stop limit in lots, for stopopff calculation
+const long __tsl_lots__ = getStopLots();
+// stop limit in units of price, for next-stop calculation
 const double __tsl_price__ = getStopPrice();
 
 void OnTick()
@@ -163,7 +202,7 @@ void OnTick()
     //
     // - Market rate slumps or (less often) rate spikes at 0:00 market time
     //   may be accompanied with an immediate increase in spread, corresponding
-    //   to or greater than the rage change. Consequently, it may be non-trivial
+    //   to or greater than the rate change. Consequently, it may be non-trivial
     //   to "follow" an abrupt 0:00 market rate change.
     //
     //   Seen in EURGPB, GPBUSD. Not so much so, in USDJPY
