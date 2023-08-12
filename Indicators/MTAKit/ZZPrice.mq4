@@ -7,7 +7,7 @@
 #property description "ZZWave Price Trace"
 #property strict
 
-#include <pricemode.mq4>
+#include <../Libraries/libMTA/pricemode.mq4>
 
 extern const ENUM_PRICE_MODE zzwave_price_mode = PRICE_MODE_TYPICAL_OPEN; // Price mode for analysis
 

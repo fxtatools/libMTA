@@ -66,10 +66,12 @@ int OnInit()
 
   printf("Total weights %f", avg_buff.total_weights);
 
-  IndicatorBuffers(avg_buff.dataBufferCount());
-  avg_buff.initIndicator();
+  // IndicatorBuffers(avg_buff.dataBufferCount());
+  if (avg_buff.initIndicator() == -1) {
+    return INIT_FAILED;
 
-  return (INIT_SUCCEEDED);
+  }
+  return INIT_SUCCEEDED;
 }
 
 int OnCalculate(const int rates_total,
@@ -84,17 +86,7 @@ int OnCalculate(const int rates_total,
                 const int &spread[])
 {
 
-  if (prev_calculated == 0)
-  {
-    printf("initializing for %d quotes", rates_total);
-    avg_buff.initVars(rates_total, open, high, low, close, tick_volume, 0);
-    }
-  else
-  {
-    DEBUG("Updating ... %d", rates_total - prev_calculated);
-    avg_buff.updateVars(open, high, low, close, tick_volume, EMPTY, 0);
-  }
-  return rates_total;
+  return avg_buff.calculate(rates_total, prev_calculated);
 }
 
 void OnDeinit(const int dicode)

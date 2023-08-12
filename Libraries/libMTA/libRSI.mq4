@@ -46,7 +46,7 @@ public:
         return StringFormat("%s(%d)", name, ma_period);
     }
 
-    void calcMain(const int idx, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
+    void calcMain(const int idx, MqlRates &rates[])
     {
         // FIXME use EMA of MWMA, to try to smooth out "zero gaps" from p_diff
         // EMA initial : Just use MWMA
@@ -58,18 +58,14 @@ public:
         double weights = __dblzero__;
         for (int n = idx + ma_period, p_k = 1; p_k <= ma_period; p_k++, n--)
         {
-            const double p_prev = price_for(n + 1, price_mode, open, high, low, close);
-            const double p_cur = price_for(n, price_mode, open, high, low, close);
-            const double p_diff = p_cur - p_prev; // sometimes zero
-            // const double wfactor = ((double)p_k * volume[n]) / (double)ma_period;
-            //// volume needs to be weighted for direction of price change.
-            //// it would create a ghost sell strength in this indicator.
-            //// see ADX +DM/-DM
-            const double wfactor = (double)p_k / (double)ma_period; // FIXME factor-in true range here (denominator)
+            const double p_prev = priceFor(n + 1, price_mode, rates);
+            const double p_cur = priceFor(n, price_mode, rates);
+            const double p_diff = p_cur - p_prev;
+            const double wfactor = weightFor(p_k, ma_period); // * (double) rates[n].tick_volume;
 
             if (dblZero(p_diff))
             {
-                // continue; // nop
+                // zero change, though affecting weights
             }
             else if (p_diff > 0)
             {
@@ -84,8 +80,8 @@ public:
         rs_plus /= weights;
         rs_minus /= weights;
 
-        const double rs = (dblZero(rs_minus) ? __dblzero__ : (rs_plus / rs_minus));
-        const double rsi_cur = (rs == __dblzero__ ? rs : 100.0 - (100.0 / (1.0 + rs)));
+        const double rs = (dblZero(rs_minus) ? DBLZERO : (rs_plus / rs_minus));
+        const double rsi_cur = (rs == DBLZERO ? rs : 100.0 - (100.0 / (1.0 + rs)));
         const double rsi_pre = rsi_data.getState();
         // using EMA of weighted average should ensure this will produce
         // no zero values in the RSI line
@@ -99,12 +95,12 @@ public:
         rsi_data.setState(store_rsi);
     }
 
-    int calcInitial(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
+    int calcInitial(const int _extent, MqlRates &rates[])
     {
         // clear any present value and calculate an initial RSI for subsequent EMA
         rsi_data.setState(EMPTY_VALUE);
         const int calc_idx = _extent - 2 - ma_period;
-        calcMain(calc_idx, open, high, low, close, volume);
+        calcMain(calc_idx, rates);
         return calc_idx;
     }
 
@@ -115,18 +111,15 @@ public:
         return 1;
     };
 
-    void initIndicator()
+    virtual int initIndicator(const int start = 0)
     {
-        // FIXME update API : initIndicator => bool
-
-        PriceIndicator::initIndicator();
-
-        // does not provide values for the indicator window, e.g indicator shortname
-        // - cf indicatorName()
-        const int first_buffer = dataBufferCount() - 1;
-        SetIndexBuffer(first_buffer, rsi_data.data);
-        SetIndexLabel(first_buffer, "RSI");
-        SetIndexStyle(first_buffer, DRAW_LINE);
+        if (!PriceIndicator::initIndicator()) {
+            return -1;
+        }
+        if (!initBuffer(start, rsi_data.data, "RSI")) {
+            return -1;
+        }
+        return start + 1;
     }
 };
 

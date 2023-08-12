@@ -45,7 +45,9 @@ MACDData *macd_in;
 int OnInit()
 {
   macd_in = new MACDData(macd_fast_ema, macd_slow_ema, macd_signal_ema, macd_price_mode, _Symbol, _Period);
-  macd_in.initIndicator();
+  if (!macd_in.initIndicator() == -1) {
+    return INIT_FAILED;
+  }
   return (INIT_SUCCEEDED);
 }
 
@@ -60,17 +62,7 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-  if (prev_calculated == 0)
-  {
-    DEBUG("Initialize for %d quotes", rates_total);
-    macd_in.initVars(rates_total, open, high, low, close, tick_volume, 0);
-  }
-  else
-  {
-    DEBUG("Updating for index %d", rates_total - prev_calculated);
-    macd_in.updateVars(open, high, low, close, tick_volume, 0);
-  }
-  return rates_total;
+ return macd_in.calculate(rates_total, prev_calculated);
 }
 
 void OnDeinit(const int dicode)

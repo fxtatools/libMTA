@@ -12,7 +12,6 @@
 
 #include <libMQL4.mq4>
 
-#include <pricemode.mq4>
 #include "indicator.mq4"
 
 /**
@@ -156,27 +155,28 @@ public:
     };
 
 
-    virtual int calcInitial(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
+    virtual int calcInitial(const int _extent, MqlRates &rates[])
     {
-        // calculate mean of True Range for first ATR
+        //// calculate high/low range for first ATR, initializing mean data
         int idx = _extent - 1;
-        double wsum = high[idx] - low[idx];
+        const MqlRates cur_rate = rates[idx];
+        double wsum = cur_rate.high - cur_rate.low;
         if (indicator_points) {
             wsum = pricePoints(wsum);
         }
         atr_buffer.setState(wsum);
-        atr_buffer.set(idx);
+        atr_buffer.set(idx--);
         DEBUG(indicatorName() + " ATR: Initial True Range sum [%d] %f", idx + 1, wsum);
         //// initialize the series calculation for volume-weighted mean
-        double weights = (double) volume[idx--];
+        double weights = (double) cur_rate.tick_volume;
         wsum *= weights;
-        //// calcualte initial volume-weighted mean calculation for ATR
+        //// calcualte initial volume-weighted mean for ATR
         for (int n = 2; n < ema_period; n++)
         {
             const int ndx = idx--;
-            const double cur = trueRange(ndx, price_mode, open, high, low, close);
+            const double cur = trueRange(ndx, price_mode, rates);
             const double cadj = indicator_points ? pricePoints(cur) : cur;
-            const double vol = (double) volume[ndx];
+            const double vol = (double) rates[ndx].tick_volume;
             weights += vol;
             wsum += (cadj * vol) ;
             const double mean = wsum / weights;
@@ -187,7 +187,7 @@ public:
         // fill for ATR EMA, using calcMain()
         for (int n = 0; n < ema_period; n++, idx--) {
              DEBUG(indicatorName() + " ATR: Fill EMA to %d", idx);
-             ATRData::calcMain(idx, open, high, low, close, volume);
+             ATRData::calcMain(idx, rates);
              atr_buffer.set(idx);
         }
         // return current idx, as incremented after final idx--
@@ -195,12 +195,12 @@ public:
     };
 
     /// @brief calculate the current true range and current ATR
-    virtual void calcMain(const int idx, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
+    virtual void calcMain(const int idx, MqlRates &rates[])
     {    
         /// preweight the LWMA sum and weights with nearest true range and nearest volume
-        const double cur = trueRange(idx, price_mode, open, high, low, close);
+        const double cur = trueRange(idx, price_mode, rates);
         double lwma = indicator_points ? pricePoints(cur) : cur;
-        double weights = (double)volume[idx];
+        double weights = (double) rates[idx].tick_volume;
         lwma *= weights;
 
         // calculate the volume-weighted LWMA
@@ -211,7 +211,7 @@ public:
             const double pre = atr_buffer.get(n);
             if (pre != EMPTY_VALUE)
             {
-                const double wfactor = ((double)p_k / ema_period_dbl) * (double) volume[n];
+                const double wfactor = weightFor(p_k, ema_period) * (double) rates[n].tick_volume;
                 DEBUG(indicatorName() + " ATR: Previous ATR at %d: %f", n, pre);
                 weights += wfactor;
                 lwma += (pre * wfactor);
@@ -219,19 +219,21 @@ public:
         }
         lwma /= weights;
         const double pre = atr_buffer.getState();
+        // final ATR value: shifted EMA of current linear WMA and previous ATR
         const double curema = ema(pre, lwma, ema_period - ema_shift);
         atr_buffer.setState(curema);
         DEBUG(indicatorName() + " ATR: New ATR [%d] %f", idx, lwma);
     };
 
-    virtual void initIndicator()
+    virtual int initIndicator(const int start = 0)
     {
-        PriceIndicator::initIndicator();
-        IndicatorDigits(Digits);
-        const int __start__ = 0;
-        SetIndexBuffer(__start__, atr_buffer.data, INDICATOR_DATA);
-        SetIndexLabel(__start__, "ATR");
-        SetIndexStyle(__start__, DRAW_LINE);
+        if (!PriceIndicator::initIndicator()) {
+            return -1;
+        }
+        if (!initBuffer(start, atr_buffer.data, "ATR")) {
+            return -1;
+        }
+        return start + 1;
     };
 };
 

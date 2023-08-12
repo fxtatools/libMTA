@@ -4,7 +4,7 @@
 #include "chartable.mq4"
 #include "rates.mq4"
 #include "quotes.mq4"
-#include <pricemode.mq4>
+#include "libMql4.mq4"
 
 #property library
 #property strict
@@ -17,6 +17,12 @@ protected:
     const int nr_buffers;
     PriceMgr *price_mgr;
     const int data_shift;
+    int extent;
+    // linear weighting
+    virtual double weightFor(const int n, const int period)
+    {
+        return (double)n / (double)period;
+    }
 
 public:
     datetime latest_quote_dt;
@@ -37,6 +43,7 @@ public:
                                                 latest_quote_dt(0),
                                                 nr_buffers(_nr_buffers),
                                                 data_shift(_data_shift),
+                                                extent(0),
                                                 Chartable(_symbol, _timeframe)
     {
         const int linked_buffers = _nr_buffers - 1;
@@ -87,7 +94,19 @@ public:
     // by way of the indicator's price manager.
     virtual bool setExtent(const int len, const int padding = EMPTY)
     {
-        return price_mgr.setExtent(len, padding);
+        if (len > extent)
+        {
+            const bool rslt = price_mgr.setExtent(len, padding);
+            if (rslt)
+            {
+                extent = len;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        return true;
     };
 
     // Default implementation: Reduce the extent of all linked
@@ -95,7 +114,19 @@ public:
     // by way of the indicator's price manager.
     virtual bool reduceExtent(const int len, const int padding = EMPTY)
     {
-        return price_mgr.reduceExtent(len, padding);
+        if (len < extent)
+        {
+            const bool rslt = price_mgr.reduceExtent(len, padding);
+            if (rslt)
+            {
+                extent = len;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        return true;
     };
 
     // utility method - return the number of chart quotes used
@@ -103,7 +134,7 @@ public:
     virtual int dataShift()
     {
         return data_shift;
-    }
+    };
 
     // return the number of chart quotes required for indicator update
     // to the provided index
@@ -125,9 +156,8 @@ public:
         PriceBuffer *buffer = price_mgr.primary_buffer;
         for (int n = 0; n < nr_buffers; n++)
         {
-            const double state = buffer.getState();
-            buffer.data[idx] = state;
-            buffer = buffer.next();
+            buffer.set(idx);
+            buffer = dynamic_cast<PriceBuffer *>(buffer.next_buffer);
         }
     };
 
@@ -146,7 +176,7 @@ public:
         {
             const double state = buffer.data[idx];
             buffer.setState(state);
-            buffer = buffer.next();
+            buffer = dynamic_cast<PriceBuffer *>(buffer.next_buffer);
         }
     };
 
@@ -161,39 +191,64 @@ public:
             {
                 const double state = buffer.getState();
                 buffer.set(idx, value);
-                buffer = buffer.next();
+                buffer = dynamic_cast<PriceBuffer *>(buffer.next_buffer);
             }
         }
     };
 
-    // Initialize any indicator display for this indicator implementation
+    // Initialize basic features of the indicator display for this
+    // indicator implementation
     //
     // Default implementation:
-    // - set the indicator name
-    // - set the indicator's display accuracy in digits to match that
+    // - sets the indicator name
+    // - sets the indicator's display accuracy in digits, to match that
     //   of the selected market symbol
-    // - set the number of indicator buffers to the value returned
-    //   by the indicator's dataBufferCount() method
-    virtual void initIndicator()
+    // - sets the number of indicator buffers to the value returned
+    //   by the implementing class' dataBufferCount() method
+    //
+    // @return false if indicator buffers could not be allocated, else true
+    virtual bool initIndicator()
     {
         IndicatorShortName(indicatorName());
         IndicatorDigits(market_digits);
-        IndicatorBuffers(dataBufferCount());
+        return IndicatorBuffers(dataBufferCount());
+    };
+
+    /// @brief Utility method for indicator buffer initialization
+    /// @param index indicatur buffer index
+    /// @param data data array for the indicator buffer
+    /// @param label label for the indicator buffer, NULL if undrawn
+    /// @param style style for the indicator buffer. If not provided and label is NULL, DRAW_NONE will be used, else DRAW_LINE.
+    /// @param kind indicator buffer type. If not provided and label is NULL, INDICATOR_CALCULATIONS will be used, else INDICATOR_DATA
+    /// @return true if an indicator buffer could be bound for the provided index, else false.
+    virtual bool initBuffer(const int index, double &data[], const string label, int style = EMPTY, ENUM_INDEXBUFFER_TYPE kind = EMPTY)
+    {
+        const ENUM_INDEXBUFFER_TYPE _kind = (kind == EMPTY) ? (label == NULL ? INDICATOR_CALCULATIONS : INDICATOR_DATA) : kind;
+        const int _style = (style == EMPTY) ? (label == NULL ? DRAW_NONE : DRAW_LINE) : style;
+
+        if (!SetIndexBuffer(index, data, _kind))
+        {
+            printf(indicatorName() + ": Unable to set %s indicator buffer for index %d", (label == NULL ? "(Unnamed)" : name), index);
+            return false;
+        }
+        SetIndexLabel(index, label);
+        SetIndexStyle(index, _style);
+        return true;
     };
 
     // calculate any variables for the indicator at the provided
     // data index, and set local state to all buffers used by this
     // indicator
-    virtual void calcMain(const int idx, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[]) = 0;
+    virtual void calcMain(const int idx, MqlRates &rates[]) = 0;
 
     // initialize data buffers and local state for variables used
     // by this indicator, and return the offset for subsequent
     // calculation by calcMain()
-    virtual int calcInitial(const int extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[]) = 0;
+    virtual int calcInitial(const int extent, MqlRates &rates[]) = 0;
 
     // run calcMain() and transfer calculation state into each
     // buffer's data arrays
-    virtual datetime updateVars(const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[], const int initial_index = EMPTY, const int padding = EMPTY, const int nearest = 0)
+    virtual datetime updateVars(MqlRates &rates[], const int initial_index = EMPTY, const int nearest = 0)
     {
         // some indicators will need to backtrack here,
         // thus the implementation of latestQuoteShift()
@@ -201,7 +256,6 @@ public:
         DEBUG(indicatorName() + " Updating to index %d", update_idx);
         if (update_idx > price_mgr.extent)
         {
-            setExtent(update_idx, padding);
         }
 
         // restore previous calculation state
@@ -209,54 +263,83 @@ public:
 
         for (int idx = update_idx; idx >= nearest; idx--)
         {
-            calcMain(idx, open, high, low, close, volume);
+            calcMain(idx, rates);
             storeState(idx);
         }
-        latest_quote_dt = iTime(symbol, timeframe, nearest);
+        latest_quote_dt = rates[0].time;
         return latest_quote_dt;
     };
 
     // call updatevars() for quote buffers provided by the QuoteMgr
-    virtual datetime updateVars(QuoteMgr &quote_mgr, const int initial_index = EMPTY, const int padding = EMPTY)
-    {
-        return updateVars(quote_mgr.open_buffer.data, quote_mgr.high_buffer.data, quote_mgr.low_buffer.data, quote_mgr.close_buffer.data, quote_mgr.vol_buffer.data, initial_index, padding);
-    };
 
     // run calcInitial() then storing each buffer's state
     // to the buffer's data array, finally dispatching to
     // updateVars() for the index returned from calcInitial()
-    virtual datetime initVars(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[], const int padding = EMPTY, const int nearest = 0)
+    virtual datetime initVars(const int _extent, MqlRates &rates[], const int nearest = 0)
     {
-        if (!setExtent(_extent, padding))
-        {
-            printf(indicatorName() + "%s: Unable to set initial extent %d", _extent);
+        if (!setExtent(_extent, 0)) // FIXME remove the padding bits altogether
+        {                           // FIXME handle this externally
+            printf(indicatorName() + ": Unable to set initial extent %d", _extent);
             return EMPTY;
         }
         DEBUG(indicatorName() + ": Bind intial value in %d", _extent);
         latest_quote_dt = 0;
-        const int calc_idx = calcInitial(_extent, open, high, low, close, volume);
+        const int calc_idx = calcInitial(_extent, rates);
         DEBUG(indicatorName() + ": Initializing data [%d/%d]", calc_idx, _extent);
 
-        storeState(calc_idx);
+        storeState(calc_idx); // store buffer state after initial calculation
+
         const int next = calc_idx - 1;
-        if (calc_idx >= nearest) {
+        if (calc_idx >= nearest)
+        {
             DEBUG(indicatorName() + ": Updating [%d ... %d]", next, nearest);
             // dispatch to call calcMain() and store state, updating to nearest rate point
-            const datetime dt = updateVars(open, high, low, close, volume, next, padding, nearest);
+            const datetime dt = updateVars(rates, next, nearest);
             DEBUG(indicatorName() + ": Returning from initVars()");
             return dt;
-        } else {
+        }
+        else
+        {
             DEBUG(indicatorName() + ": Initialized to %d at %s", calc_idx, offset_time_str(calc_idx, symbol, timeframe));
-            latest_quote_dt = iTime(symbol, timeframe, calc_idx);
+            latest_quote_dt = rates[0].time;
             return latest_quote_dt;
         }
     };
 
     // dispatch to initVars() for quote buffers provided by the QuoteMgr
-    virtual datetime initVars(const int _extent, QuoteMgr &quote_mgr, const int padding = EMPTY)
+    virtual int calculate(const int rates_total, const int prev_calculated = EMPTY)
     {
-        return initVars(_extent, quote_mgr.open_buffer.data, quote_mgr.high_buffer.data, quote_mgr.low_buffer.data, quote_mgr.close_buffer.data, quote_mgr.vol_buffer.data, padding);
-    };
+        // uniformal API for indicator rates data
+
+        MqlRates rateinfo[]; // FIXME move this to a quotes manager
+        ArraySetAsSeries(rateinfo, true);
+
+        const int prev = prev_calculated == EMPTY ? extent : prev_calculated;
+        ArrayResize(rateinfo, rates_total);
+        // the following will presumably use all rates for the chart.
+        // in this form, with updated MQL4, it should not actually copy the data points
+        //
+        // and yet that seemingly DNW for accessing the array again in MQL?
+        const int copied = ArrayCopyRates(rateinfo, _Symbol, _Period);
+        if (copied == -1)
+        {
+            printf(indicatorName() + ": Unable to copy %d rates", rates_total);
+            return 0;
+        }
+        else if (copied != rates_total)
+        {
+            printf(indicatorName() + ": Rates copied not equal to rates total: %d, %d", copied, rates_total);
+        }
+        if (prev_calculated == 0)
+        {
+            initVars(rates_total, rateinfo);
+        }
+        else
+        {
+            updateVars(rateinfo);
+        }
+        return rates_total;
+    }
 };
 
 #endif

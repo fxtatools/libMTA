@@ -19,14 +19,14 @@ static int __initial_rates_total__ = EMPTY;
 
 #include "libZZWave.mq4"
 
-#include <libMql4.mq4>
+#include <../Libraries/libMTA/libMql4.mq4>
 
 #define BUFFER_PADDING 256
 #define ZZ_BUFFER_COUNT 2
 
 void zz_update_buffers(const int size, double &linebuff[], double &statebuff[]) {
     // this section needs to be called on each recharting,
-    // or resize the buffers when rates_total > initial_rates_total
+    // to resize the buffers when rates_total > initial_rates_total
     //
     // see zz_pre_update() in zzindicator.mq4
     ArrayResize(linebuff, size, BUFFER_PADDING);

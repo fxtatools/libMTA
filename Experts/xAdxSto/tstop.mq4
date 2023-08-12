@@ -9,7 +9,7 @@ extern const long ts_points = 10; // Trailing Stop Points
 extern const long tp_points = 60; // Take Profit Points
 
 #include <stdlib.mqh>
-#include <libMql4.mq4>
+#include <../Libraries/libMTA/libMql4.mq4>
 
 bool opened_trailing_stop = false;
 
@@ -145,7 +145,7 @@ double getStopPrice(const string symbol = NULL)
 //
 double getStopoff(const long factor, const long limit, int digits = EMPTY)
 {
-    digits = digits == EMPTYU ? Digits : digits;
+    digits = digits == EMPTY ? Digits : digits;
     if (limit == 0)
     {
         // FIXME assumes current symbol @ Digits

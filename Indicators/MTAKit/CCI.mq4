@@ -41,9 +41,9 @@ int OnInit()
 {
     cci_in = new CCIData(cci_mean_period, cci_signal_period, cci_price_mode, cci_factor, _Symbol, _Period);
 
-    //// FIXME update API : initIndicator => bool
-    // if(cci_in.initIndicator()) ...
-    cci_in.initIndicator();
+    if (cci_in.initIndicator() == -1) {
+        return INIT_FAILED;
+    }
     return INIT_SUCCEEDED;
 }
 
@@ -58,16 +58,7 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-    if (prev_calculated == 0)
-    {
-        cci_in.initVars(rates_total, open, high, low, close, tick_volume, 0);
-    }
-    else
-    {
-        cci_in.updateVars(open, high, low, close, tick_volume, EMPTY, 0);
-    }
-
-    return (rates_total);
+   return cci_in.calculate(rates_total, prev_calculated);
 }
 
 void OnDeinit(const int dicode)

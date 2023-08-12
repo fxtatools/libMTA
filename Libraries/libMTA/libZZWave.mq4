@@ -14,8 +14,7 @@
 #include <MQLsyntax.mqh>
 #endif
 
-#include <libMql4.mq4>
-#include <pricemode.mq4>
+#include "libMql4.mq4"
 
 #property library
 #property strict
@@ -64,7 +63,7 @@ void fill_extents_price(double &extents[],
 {
     const int __start__ = 0;
 
-    double p_last = price_for(__start__, price_mode, open, high, low, close);
+    double p_last = priceFor(__start__, price_mode, open, high, low, close);
     const double p_initial = p_last;
     double p_next, r_p;
     double r_p_trend = __dblzero__;
@@ -80,7 +79,7 @@ void fill_extents_price(double &extents[],
 
     for (int n = __start__ + 1; n < len; n++)
     {
-        p_next = price_for(n, price_mode, open, high, low, close);
+        p_next = priceFor(n, price_mode, open, high, low, close);
         r_p = p_next / p_trend;
         update = false;
         zero_previous = false;

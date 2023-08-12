@@ -26,9 +26,10 @@ int OnInit()
 {
   atr_data = new ATRData(iatr_period, iatr_period_shift, iadx_price_mode, iatr_use_points, _Symbol, _Period);
 
-  atr_data.initIndicator();
-
-  return (INIT_SUCCEEDED);
+  if (atr_data.initIndicator() == -1) {
+    return INIT_FAILED;
+  }
+  return INIT_SUCCEEDED;
 }
 
 int OnCalculate(const int rates_total,
@@ -42,6 +43,7 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
+  return atr_data.calculate(rates_total, prev_calculated);
   if (prev_calculated == 0)
   {
     DEBUG("init %d", rates_total);
@@ -52,8 +54,9 @@ int OnCalculate(const int rates_total,
     DEBUG("updating %d/%d %s => %s", prev_calculated, rates_total, TimeToStr(atr_data.latest_quote_dt), offset_time_str(0));
     atr_data.updateVars(open, high, low, close, tick_volume, EMPTY, 0);
   }
-
+  
   return (rates_total);
+  */
 }
 
 void OnDeinit(const int dicode)

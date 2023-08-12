@@ -50,16 +50,16 @@ class RatesBuffer : public ObjectBuffer<MqlRates>
     // from Chartable.
 
 protected:
-    Chartable *chartInfo;
+    Chartable *chart_info;
 
 public:
     RatesBuffer(const int _extent = 0, const bool as_series = true, const string symbol = NULL, const int timeframe = EMPTY) : ObjectBuffer<MqlRates>(_extent, as_series)
     {
-        chartInfo = new Chartable(symbol == NULL ? _Symbol : symbol, timeframe == EMPTY ? _Period : timeframe);
+        chart_info = new Chartable(symbol == NULL ? _Symbol : symbol, timeframe == EMPTY ? _Period : timeframe);
     };
     ~RatesBuffer()
     {
-        FREEPTR(chartInfo);
+        FREEPTR(chart_info);
     };
 
     /// TBD b.c MQL is broken in nearly all of C++ pointer handling
@@ -120,72 +120,90 @@ typedef MqlRates *thunk[];
 using std::nullptr_t;
 */
 
-
 class RatesMgr : public BufferMgr<RatesBuffer>
 {
+    // interface class providing virtual buffer access with [] defined
+    // as an operator on each buffer, for access to open, high, low, close data
+    //
+    // an earlier prototype, this does not in fact provide an array of
+    // data points. The Indicator API has since been updated to support
+    // passing an MqlRates rates[] array during indicator initialization
+    // and update - QuotesMgr needs update, subsq.
+
 protected:
     // a bit of indirection presently, for a novel prototype
     // - provides operator[] for open, high, etc.
     // - does not provide const double[] access to the same data
     // - succinct, though by-in-large utterly useless in MQL
     //
-    class VirtRatesBuffer {
+    class VirtRatesBuffer
+    {
     public:
         const RatesMgr *mgr;
-        VirtRatesBuffer(RatesMgr *_mgr) : mgr(_mgr) {};
+        VirtRatesBuffer(RatesMgr *_mgr) : mgr(_mgr){};
     };
 
-    class VirtOpenBuffer : VirtRatesBuffer {
+    class VirtOpenBuffer : VirtRatesBuffer
+    {
     public:
-        VirtOpenBuffer(RatesMgr *_mgr) : VirtRatesBuffer(_mgr) {};
-        double operator[](const int idx) const {
+        VirtOpenBuffer(RatesMgr *_mgr) : VirtRatesBuffer(_mgr){};
+        double operator[](const int idx) const
+        {
             return mgr.primary_buffer.data[idx].open;
         };
     };
 
-    class VirtHighBuffer : VirtRatesBuffer {
+    class VirtHighBuffer : VirtRatesBuffer
+    {
     public:
-        VirtHighBuffer(RatesMgr *_mgr) : VirtRatesBuffer(_mgr) {};
-        double operator[](const int idx) const {
+        VirtHighBuffer(RatesMgr *_mgr) : VirtRatesBuffer(_mgr){};
+        double operator[](const int idx) const
+        {
             return mgr.primary_buffer.data[idx].high;
         };
     };
 
-    class VirtLowBuffer : VirtRatesBuffer {
+    class VirtLowBuffer : VirtRatesBuffer
+    {
     public:
-        VirtLowBuffer(RatesMgr *_mgr) : VirtRatesBuffer(_mgr) {};
-        double operator[](const int idx) const {
+        VirtLowBuffer(RatesMgr *_mgr) : VirtRatesBuffer(_mgr){};
+        double operator[](const int idx) const
+        {
             return mgr.primary_buffer.data[idx].low;
         };
     };
 
-    class VirtCloseBuffer : VirtRatesBuffer {
+    class VirtCloseBuffer : VirtRatesBuffer
+    {
     public:
-        VirtCloseBuffer(RatesMgr *_mgr) : VirtRatesBuffer(_mgr) {};
-        double operator[](const int idx) const {
+        VirtCloseBuffer(RatesMgr *_mgr) : VirtRatesBuffer(_mgr){};
+        double operator[](const int idx) const
+        {
             return mgr.primary_buffer.data[idx].close;
         };
     };
 
-    class VirtTimeBuffer : VirtRatesBuffer {
+    class VirtTimeBuffer : VirtRatesBuffer
+    {
     public:
-        VirtTimeBuffer(RatesMgr *_mgr) : VirtRatesBuffer(_mgr) {};
-        datetime operator[](const int idx) const {
+        VirtTimeBuffer(RatesMgr *_mgr) : VirtRatesBuffer(_mgr){};
+        datetime operator[](const int idx) const
+        {
             return mgr.primary_buffer.data[idx].time;
         };
     };
 
-  class VirtVolBuffer : VirtRatesBuffer {
+    class VirtVolBuffer : VirtRatesBuffer
+    {
     public:
-        VirtVolBuffer(RatesMgr *_mgr) : VirtRatesBuffer(_mgr) {};
-        long operator[](const int idx) const {
+        VirtVolBuffer(RatesMgr *_mgr) : VirtRatesBuffer(_mgr){};
+        long operator[](const int idx) const
+        {
             return mgr.primary_buffer.data[idx].tick_volume;
         };
     };
 
-
 public:
-
     VirtOpenBuffer *open;
     VirtHighBuffer *high;
     VirtLowBuffer *low;
@@ -203,7 +221,8 @@ public:
         time = new VirtTimeBuffer(&this);
         volume = new VirtVolBuffer(&this);
     };
-    ~RatesMgr() {
+    ~RatesMgr()
+    {
         FREEPTR(primary_buffer);
         FREEPTR(open);
         FREEPTR(high);
@@ -220,7 +239,6 @@ public:
         // initial extent is 0, by default
         return primary_buffer.getRates(count, start);
     }
-
 };
 
 #endif

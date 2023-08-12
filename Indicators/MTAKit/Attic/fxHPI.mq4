@@ -30,10 +30,9 @@ HPIData *hpi;
 int OnInit()
 {
     hpi = new HPIData(hpi_period, hpi_price_mode, _Symbol, _Period);
-
-    //// FIXME update API : initIndicator => bool
-    // return hpi.initIndicator();
-    hpi.initIndicator();
+    if (hpi.initIndicator() == -1) {
+        return INIT_FAILED;
+    };
     return INIT_SUCCEEDED;
 }
 
@@ -48,16 +47,7 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-    if (prev_calculated == 0)
-    {
-        hpi.initVars(rates_total, open, high, low, close, tick_volume, 0);
-    }
-    else
-    {
-        hpi.updateVars(open, high, low, close, tick_volume, EMPTY, 0);
-    }
-
-    return (rates_total);
+    return hpi.calculate(rates_total, prev_calculated);
 }
 
 void OnDeinit(const int dicode)

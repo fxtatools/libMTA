@@ -6,6 +6,8 @@
 #property library
 
 #include "rates.mq4"
+#include "chartable.mq4"
+#include "libMql4.mq4"
 
 // Quote Manager constants (FIXME no longer used)
 #define QUOTE_TIME 1
@@ -106,10 +108,10 @@ public:
     {
         chartInfo = new Chartable(_symbol, _timeframe);
 
-        open_buffer = primary_buffer;
-        high_buffer = open_buffer.next();
-        low_buffer = high_buffer.next();
-        close_buffer = low_buffer.next();
+        open_buffer = dynamic_cast<QuotedPriceBuffer*>(primary_buffer);
+        high_buffer = dynamic_cast<QuotedPriceBuffer*>(open_buffer.next_buffer);
+        low_buffer = dynamic_cast<QuotedPriceBuffer*>(high_buffer.next_buffer);
+        close_buffer = dynamic_cast<QuotedPriceBuffer*>(low_buffer.next_buffer);
         // typed as other than a PriceBuffer, the QuotedTimeBuffer will be managed
         // independent to the linked price buffer structure
         time_buffer = new QuotedTimeBuffer(_extent, as_series);
@@ -173,7 +175,7 @@ public:
             if (!reduceExtent(_extent))
                 return false;
         }
-        DEBUG("Quote Manager %s, %d: New extent (%d, %d, %d %d) %d", chartInfo.getSymbol(), chartInfo.getTimeframe(), ArraySize(time_buffer.data), ArraySize(primary_buffer.data), time_buffer.extent, time_buffer.expand_extent, extent);
+        DEBUG("Quote Manager %s, %d: New extent (%d, %d, %d %d) %d", chartInfo.getSymbol(), chartInfo.getTimeframe(), ArraySize(time_buffer.data), ArraySize(open_buffer.data), time_buffer.extent, time_buffer.expand_extent, extent);
         return true;
     }
 

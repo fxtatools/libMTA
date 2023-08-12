@@ -13,6 +13,7 @@
 
 #property copyright "Copyright 2023, Sean Champ"
 #property link "https://www.example.com/nop"
+#property library
 #property strict
 
 #ifndef DBLZERO_DEFINED
@@ -29,6 +30,8 @@ extern bool debug = false;
     if (debug) \
     printf
 #endif
+
+#include "pricemode.mq4"
 
 /**
  * Return the time at a given offset, as a single datetime value
@@ -87,24 +90,27 @@ double ema_factor(const double period)
     return (2.0 / (period + 1.0));
 };
 
-// calculate the conventioanl exponential moving average of a 
+// calculate the conventioanl exponential moving average of a
 // previous value and current over a fixed period
 double ema(const double pre, const double cur, const double period)
 {
-    // reference:
+    // references:
     // Pruitt, G. (2016). Stochastics and Averages and RSI! Oh, My.
     // In The Ultimate Algorithmic Trading System Toolbox + Website (pp. 25–76).
     // John Wiley & Sons, Inc. https://doi.org/10.1002/9781119262992.ch2
+    // https://en.wikipedia.org/wiki/Exponential_smoothing
+    // https://www.investopedia.com/ask/answers/122314/what-exponential-moving-average-ema-formula-and-how-ema-calculated.asp
+
     return ((cur - pre) * ema_factor(period)) + pre;
 };
 
 // calculate a shifted EMA for a previous value and current
 // value over a fixed period
 //
-// a shift of 1 produces an EMA in the method of ADX EMA developed 
+// a shift of 1 produces an EMA in the method of ADX EMA developed
 // originally by Welles Wilder
 //
-// 
+//
 // general formula:
 //   (pre * (period - shift) + (cur * shift)) / period
 //
@@ -119,7 +125,6 @@ double emaShifted(const double pre, const double cur, const double period, const
     return ((pre * shifted_period) + (cur * shift)) / period;
 };
 
-
 // calculate the mean of values in a provided data arrary
 double mean(const double period, double &data[], const int start = 0)
 {
@@ -133,7 +138,7 @@ double mean(const double period, double &data[], const int start = 0)
 
 // calculate the standard deviation of values in a provided data arrary
 //
-// if a mean is provided, this value will be used as the mean for 
+// if a mean is provided, this value will be used as the mean for
 // the calculation of standard deviation. If mean is EMPTY, the mean
 // will be calcualted as with mean()
 double sdev(const double period, double &data[], const int start = 0, const double _mean = (double)EMPTY_VALUE)
@@ -144,10 +149,9 @@ double sdev(const double period, double &data[], const int start = 0, const doub
     {
         variance += pow(data[n] - m, 2);
     }
-    variance /= period;
+    variance /= (double)(period - 1);
     return sqrt(variance);
 }
-
 
 // calculate the mean of price for a provided extent within open,
 // high, low, and close quote data
@@ -156,15 +160,15 @@ double mean(const int period, const int price_mode, const double &open[], const 
     double sum = DBLZERO;
     for (int n = start, p = 0; p < period; n++, p++)
     {
-        sum += price_for(n, price_mode, open, high, low, close);
+        sum += priceFor(n, price_mode, open, high, low, close);
     }
-    return sum / (double) period;
+    return sum / (double)period;
 }
 
 // calculate the standard deviation of price within open, high, low
 // and close quote data
 //
-// if a mean is provided, this value will be used as the mean for 
+// if a mean is provided, this value will be used as the mean for
 // the calculation of standard deviation. If mean is EMPTY, the mean
 // will be calcualted as with mean()
 double sdev(const int period, const int price_mode, const double &open[], const double &high[], const double &low[], const double &close[], const int start = 0, const double _mean = (double)EMPTY_VALUE)
@@ -173,12 +177,41 @@ double sdev(const int period, const int price_mode, const double &open[], const 
     double variance = DBLZERO;
     for (int n = start, p = 0; p < period; n++, p++)
     {
-        variance += pow(price_for(n, price_mode, open, high, low, close) - m, 2);
+        variance += pow(priceFor(n, price_mode, open, high, low, close) - m, 2);
     }
-    variance /= (double) period;
+    variance /= (double)(period - 1);
     return sqrt(variance);
 }
 
+// calculate the mean of price for a provided extent within open,
+// high, low, and close quote data
+double mean(const int period, const int price_mode, MqlRates &rates[], const int start = 0)
+{
+    double sum = DBLZERO;
+    for (int n = start, p = 0; p < period; n++, p++)
+    {
+        sum += priceFor(n, price_mode, rates);
+    }
+    return sum / (double)period;
+}
+
+// calculate the standard deviation of price within open, high, low
+// and close quote data
+//
+// if a mean is provided, this value will be used as the mean for
+// the calculation of standard deviation. If mean is EMPTY, the mean
+// will be calcualted as with mean()
+double sdev(const int period, const int price_mode, MqlRates &rates[], const int start = 0, const double _mean = (double)EMPTY_VALUE)
+{
+    const double m = (_mean == (double)EMPTY_VALUE ? mean(period, price_mode, rates, start) : _mean);
+    double variance = DBLZERO;
+    for (int n = start, p = 0; p < period; n++, p++)
+    {
+        variance += pow(priceFor(n, price_mode, rates) - m, 2);
+    }
+    variance /= (double)(period - 1);
+    return sqrt(variance);
+}
 
 //
 // Trivial Debugging support - ALERT + StringFormat macros
@@ -199,7 +232,6 @@ double sdev(const int period, const int price_mode, const double &open[], const 
 #ifndef ALERTF_4
 #define ALERTF_4(_MSG_, _ARG1_, _ARG2_, _ARG3_, _ARG4_) Alert(StringFormat(_MSG_, _ARG1_, _ARG2_, _ARG3_, _ARG4_))
 #endif
-
 
 // ...
 

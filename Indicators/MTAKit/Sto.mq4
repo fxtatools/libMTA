@@ -16,16 +16,15 @@
 #property indicator_color1 clrMediumBlue
 #property indicator_width1 1
 #property indicator_style1 STYLE_SOLID
+
 // STO signal data
 #property indicator_color2 clrFireBrick
 #property indicator_width2 1
 #property indicator_style2 STYLE_SOLID
 
-/*
 #property indicator_color3 clrGold
 #property indicator_width3 1
 #property indicator_style3 STYLE_DOT
-*/
 
 #property indicator_level1 0.0
 #property indicator_level2 - 50.0
@@ -34,9 +33,8 @@
 #property indicator_levelstyle 2
 
 extern const int sto_k = 14; // K Period
-extern const int sto_d = 3;  // D Period
-extern const int sto_d_slow = 3;  // D Slow Period
-extern const int sto_xma = 3;  // Crossover MA Period
+extern const int sto_d = 8;  // D Period
+extern const int sto_d_slow = 6;  // D Slow Period
 extern const ENUM_APPLIED_PRICE sto_price_mode = PRICE_CLOSE; // Applied Price
 
 #include <../Libraries/libMTA/libSTO.mq4>
@@ -64,16 +62,7 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-    if (prev_calculated == 0)
-    {
-        sto_in.initVars(rates_total, open, high, low, close, tick_volume, 0);
-    }
-    else
-    {
-        sto_in.updateVars(open, high, low, close, tick_volume, EMPTY, 0);
-    }
-
-    return (rates_total);
+    return sto_in.calculate(rates_total, prev_calculated);
 }
 
 void OnDeinit(const int dicode)

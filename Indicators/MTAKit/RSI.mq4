@@ -36,8 +36,10 @@ RSIData *rsi_data;
 int OnInit()
 {
     rsi_data = new RSIData(rsi_period, rsi_price_mode, _Symbol, _Period);
-    rsi_data.initIndicator();
-    return (INIT_SUCCEEDED);
+    if (rsi_data.initIndicator() == -1) {
+        return INIT_FAILED;
+    }
+    return INIT_SUCCEEDED;
 };
 
 int OnCalculate(const int rates_total,
@@ -51,17 +53,7 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-    if (prev_calculated == 0)
-    {
-        DEBUG("Initialize for %d quotes", rates_total);
-        rsi_data.initVars(rates_total, open, high, low, close, tick_volume, 0);
-    }
-    else
-    {
-        DEBUG("Updating for index %d", rates_total - prev_calculated);
-        rsi_data.updateVars(open, high, low, close, tick_volume, EMPTY, 0);
-    }
-    return rates_total;
+    return rsi_data.calculate(rates_total, prev_calculated);
 };
 
 void OnDeinit(const int dicode)

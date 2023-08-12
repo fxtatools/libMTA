@@ -126,7 +126,8 @@ public:
 
     T get(const int idx)
     {
-        // this assumes a value has been initialized at idx
+        // unchecked call - this assumes that a value has been initialized
+        // at idx and that the buffer's extent is > idx
         return data[idx];
     };
 
@@ -137,19 +138,17 @@ public:
 
     void set(const int idx, const T datum)
     {
-        // this assumes the buffer's extent is already > idx
-        //
-        // method definition unusable for RatesBuffer
+        // unchecked call - this assumes that the buffer's extent is > idx
         data[idx] = datum;
     };
 
     void set(const int idx) {
+        // DEBUG(__FUNCSIG__ + "set(%d) extent %d len %d", idx, extent, ArraySize(data));
         data[idx] = getState();
     }
 
     void setState(const T datum)
     {
-        // method definition unusable for RatesBuffer
         initial_state = datum;
     };
 };
@@ -158,9 +157,14 @@ template <typename T>
 class LinkedBuffer : public ValueBuffer<T>
 {
 protected:
-    LinkedBuffer<T> *next_buffer;
 
 public:
+    // pointer for the next linked buffer. This value is wholly untyped, 
+    // to allow for linking with other linked indicator buffers, regardless
+    // of th e data type for values stored in each.
+    void *next_buffer;
+
+
     LinkedBuffer() : next_buffer(NULL){};
 
     LinkedBuffer(const int _extent = 0, const bool as_series = true) :  next_buffer(NULL), ValueBuffer<T>(_extent, as_series){};
@@ -173,11 +177,12 @@ public:
     /// @brief retrieve the next buffer to this LinkedBuffer
     /// @return the next LinkedBuffer, or NULL if this linked buffer has not
     ///   been defined with a next buffer
-    // template <typename Tv>
-    // LinkedBuffer<Tv> *next()
-    LinkedBuffer<T> *next()
+    template <typename Tv>
+    Tv *next()
     {
-        return next_buffer;
+        // return next_buffer;
+        // return dynamic_cast<LinkedBuffer<Tv>*>(next_buffer);
+        return dynamic_cast<Tv*>(next_buffer);
     };
 
     /// @brief return the nth linked member of this LinkedBuffer series
@@ -185,7 +190,8 @@ public:
     /// @return this rate buffer when `n == 0`,
     //    else NULL when there is no next buffer,
     //    else the {n-1}th next buffer
-    LinkedBuffer<T> *nth(const int n)
+    template <typename Tv>
+    Tv *nth(const int n)
     {
         if (n == 0)
         {
@@ -197,14 +203,16 @@ public:
         }
         else
         {
-            return next_buffer.nth(n - 1);
+            // return dynamic_cast<LinkedBuffer<Tv>*>(next_buffer.nth(n - 1));
+            return dynamic_cast<Tv*>(next_buffer.nth(n - 1));
         }
     };
 
     /// @brief return the last linked LinkedBuffer of this series
     /// @return this buffer, if the next buffer is NULL, else
     //    the last of the next buffer
-    LinkedBuffer<T> *last()
+    template <typename Tv>
+    Tv *last(const int n)
     {
         if (next_buffer == NULL)
         {
@@ -212,7 +220,8 @@ public:
         }
         else
         {
-            return next_buffer.last();
+            // return dynamic_cast<LinkedBuffer<Tv>*>(next_buffer.last());
+            return dynamic_cast<Tv*>(next_buffer.last());
         }
     };
 
@@ -220,11 +229,9 @@ public:
     /// @param next LinkedBuffer to set as this buffer's next buffer
     /// @return NULL if no rate buffer was previously defined as the next buffer,
     //   else the previously defined next buffer
-    LinkedBuffer<T> *setNext(LinkedBuffer<T> *next)
+    void setNext(void *next)
     {
-        LinkedBuffer<T> *prev_next = next_buffer;
         next_buffer = next;
-        return prev_next;
     };
 
     /// @brief increase the length of this and all linked data buffers
@@ -237,10 +244,11 @@ public:
     {
         const bool rslt = DataBuffer<T>::setExtent(len, padding);
         if (rslt && (next_buffer != NULL))
-            return next_buffer.setExtent(len, padding);
+            return (dynamic_cast<DataBuffer<T>*>(next_buffer)).setExtent(len, padding);
         else
             return rslt;
     };
+    
 
     /// @brief reduce the length of this and all linked data buffers
     /// @param len new length for linked data buffers
@@ -252,7 +260,7 @@ public:
     {
         const bool rslt = DataBuffer<T>::reduceExtent(len, padding);
         if (rslt && (next_buffer != NULL))
-            return next_buffer.reduceExtent(len, padding);
+            return (dynamic_cast<DataBuffer<T>*>(next_buffer)).reduceExtent(len, padding);
         else
             return rslt;
     };
@@ -265,17 +273,19 @@ public:
     {
         const bool rslt = DataBuffer<T>::setAsSeries(as_series);
         if (rslt && (next_buffer != NULL))
-            return next_buffer.setAsSeries(as_series);
+            return (dynamic_cast<DataBuffer<T>*>(next_buffer)).setAsSeries(as_series);
         else
             return rslt;
     };
+    
 };
 
 template <typename T>
 class BufferMgr
 {
 public:
-    T *primary_buffer;
+    // T *primary_buffer;
+    void *primary_buffer; // untyped here, to work around some compiler features
     int extent;
 
     BufferMgr()
@@ -293,11 +303,18 @@ public:
         primary_buffer = new T(_extent, as_series);
     };
 
+    template <typename Tv>
+    Tv* primaryBuffer() {
+        // an ostensibly low-level feature of this data buffer API,
+        // this method may generally require casting at the call site
+        return dynamic_cast<Tv*>(primary_buffer);
+    }
+
     virtual bool setExtent(const int _extent, const int padding = EMPTY)
     {
         if (_extent == extent)
             return true;
-        const bool rslt = primary_buffer.setExtent(_extent, padding);
+        const bool rslt = dynamic_cast<T*>(primary_buffer).setExtent(_extent, padding);
         if (rslt)
         {
             extent = _extent;
@@ -310,7 +327,7 @@ public:
     {
         if (_extent == extent)
             return true;
-        const bool rslt = primary_buffer.reduceExtent(_extent, padding);
+        const bool rslt = dynamic_cast<T*>(primary_buffer).reduceExtent(_extent, padding);
         if (rslt)
         {
             extent = _extent;
@@ -348,8 +365,6 @@ public:
 class PriceBuffer : public LinkedBuffer<double>
 {
 public:
-   // PriceBuffer(const int _extent = 0, const bool as_series = true, const int n_more = 0) : LinkedBuffer<double>(_extent, as_series, n_more) {};
-   
     PriceBuffer(const int _extent = 0, const bool as_series = true, const int n_more = 0) : LinkedBuffer<double>(_extent, as_series)
     {
         if (n_more == 0)
@@ -360,19 +375,16 @@ public:
         }
         else
         {
-            PriceBuffer *nxt = new PriceBuffer(_extent, as_series, n_more - 1);
-            this.setNext(nxt);
+            this.setNext(new PriceBuffer(_extent, as_series, n_more - 1));
         }
     };
 
 };
 
 class PriceMgr : public LinkedBufferMgr<PriceBuffer>
-// class PriceMgr : public LinkedBufferMgr<double>
 {
 public:
     PriceMgr(const int _extent = 0, const bool as_series = true, const int n_linked = 0) : LinkedBufferMgr<PriceBuffer>(_extent, as_series, n_linked){};
-   // PriceMgr(const int _extent = 0, const bool as_series = true, const int n_linked = 0) : LinkedBufferMgr<double>(_extent, as_series, n_linked){};
 };
 
 #endif

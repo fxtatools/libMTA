@@ -8,12 +8,14 @@
 
 #include "indicator.mq4"
 
-// TBD: generalize CCIData to CCIBase,
-// - moving the signal line configuration (initIndicator) to CCIData.
-// - implement class CCIBands : public CCIData
-//   - derive the bands from the CCI signal line in CCIBase
-
-/// @brief CCI Graph Indicator
+/// @brief An adaptation of George C. Lane's Commodity Channel Index
+///
+// @par References
+///
+/// Pruitt, G. (2016). Stochastics and Averages and RSI! Oh, My.
+///   In The Ultimate Algorithmic Trading System Toolbox + Website (pp. 25–76).
+///   John Wiley & Sons, Inc. https://doi.org/10.1002/9781119262992.ch2
+///
 class CCIData : public PriceIndicator
 {
 protected:
@@ -27,25 +29,25 @@ public:
     const double cci_factor; // CCI scaling factor (market-dependent)
 
     CCIData(const int _mean_period = 20,
-             const int _signal_period = 9,
-             const int _price_mode = PRICE_TYPICAL,
-             const double _cci_factor = EMPTY,
-             const string _symbol = NULL,
-             const int _timeframe = EMPTY,
-             const string _name = "CCI",
-             const int _data_shift = EMPTY,
-             const int _nr_buffers = 2) : mean_period(_mean_period),
-                                          signal_period(_signal_period),
-                                          price_mode(_price_mode),
-                                          cci_factor(_cci_factor == EMPTY ? 0.015 : _cci_factor),
-                                          PriceIndicator(_name,
-                                                         _nr_buffers,
-                                                         _symbol,
-                                                         _timeframe,
-                                                         _data_shift == EMPTY ? _mean_period + _signal_period : _data_shift)
+            const int _signal_period = 9,
+            const int _price_mode = PRICE_TYPICAL,
+            const double _cci_factor = EMPTY,
+            const string _symbol = NULL,
+            const int _timeframe = EMPTY,
+            const string _name = "CCI",
+            const int _data_shift = EMPTY,
+            const int _nr_buffers = 2) : mean_period(_mean_period),
+                                         signal_period(_signal_period),
+                                         price_mode(_price_mode),
+                                         cci_factor(_cci_factor == EMPTY ? 0.015 : _cci_factor),
+                                         PriceIndicator(_name,
+                                                        _nr_buffers,
+                                                        _symbol,
+                                                        _timeframe,
+                                                        _data_shift == EMPTY ? _mean_period + _signal_period : _data_shift)
     {
-        cci_data = price_mgr.primary_buffer;
-        cci_signal = cci_data.next();
+        cci_data = dynamic_cast<PriceBuffer *>(price_mgr.primary_buffer);
+        cci_signal = dynamic_cast<PriceBuffer *>(cci_data.next_buffer);
     };
     ~CCIData()
     {
@@ -56,7 +58,7 @@ public:
 
     string indicatorName() const
     {
-        return StringFormat("%s[%.2f](%d, %d)", name, cci_factor, cci_mean_period, signal_period);
+        return StringFormat("%s(%d, %d)", name, mean_period, signal_period);
     }
 
     virtual int dataShift()
@@ -70,24 +72,26 @@ public:
         return idx + dataShift() + 1;
     };
 
-    void calcCCI(const int idx, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
+    void calcCCI(const int idx, MqlRates &rates[])
     {
         const double m_dbl = (double)mean_period;
         double weights = __dblzero__;
         double m = __dblzero__;
         for (int n = idx + mean_period - 1, p_k = 1; n >= idx; n--, p_k++)
         {
-            const double wfactor = (double)p_k / m_dbl;
-            m += (price_for(n, price_mode, open, high, low, close) * wfactor);
+            // const double wfactor = (double)p_k / m_dbl;
+            const double wfactor = weightFor(p_k, mean_period);
+            m += (priceFor(n, price_mode, rates) * wfactor);
             weights += wfactor;
         }
         m /= weights;
         // const double m = mean(mean_period, price_mode, open, high, low, close, idx);
         DEBUG("CCI Mean at %d: %f", idx, m);
-        const double sd = sdev(mean_period, price_mode, open, high, low, close, idx, m);
+        const double sd = sdev(mean_period, price_mode, rates, idx, m);
         DEBUG("CCI SDev at %d: %f", idx, sd);
-        const double p = price_for(idx, price_mode, open, high, low, close);
-        if (dblZero(sd)) {
+        const double p = priceFor(idx, price_mode, rates);
+        if (dblZero(sd))
+        {
             cci_data.setState(DBLZERO);
             return;
         }
@@ -95,7 +99,7 @@ public:
         cci_data.setState(cci);
     }
 
-    void calcSignal(const int idx, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
+    void calcSignal(const int idx, MqlRates &rates[])
     {
         const double s_d = (double)signal_period;
         double s_cur = DBLZERO;
@@ -113,7 +117,8 @@ public:
         // not a particularly useful signal calculation:
         for (int n = idx + signal_period - 1, p_k = 1; p_k <= signal_period; n--, p_k++)
         {
-            const double wfactor = (double)p_k / s_d;
+            // const double wfactor = (double)p_k / s_d;
+            const double wfactor = weightFor(p_k, signal_period);
             const double cur = cci_data.get(n);
             if (cur == EMPTY_VALUE)
             {
@@ -135,14 +140,14 @@ public:
         cci_signal.setState(s_ema);
     }
 
-    void calcMain(const int idx, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
+    void calcMain(const int idx, MqlRates &rates[])
     {
-        calcCCI(idx, open, high, low, close, volume);
+        calcCCI(idx, rates);
         cci_data.set(idx, cci_data.getState());
-        calcSignal(idx, open, high, low, close, volume);
+        calcSignal(idx, rates);
     }
 
-    int calcInitial(const int _extent, const double &open[], const double &high[], const double &low[], const double &close[], const long &volume[])
+    int calcInitial(const int _extent, MqlRates &rates[])
     {
         const int calc_idx = _extent - 1 - CCIData::dataShift();
         DEBUG("Set initial CCI values for %d/%d", calc_idx, _extent);
@@ -150,7 +155,7 @@ public:
         for (int n = calc_idx + signal_period + 1; n >= calc_idx; n--)
         {
             DEBUG("Set initial CCI value at %d", n);
-            calcCCI(n, open, high, low, close, volume);
+            calcCCI(n, rates);
             const double rslt = cci_data.getState();
             DEBUG("Initial CCI value at %d: %f", n, rslt);
             cci_data.set(n, rslt);
@@ -158,13 +163,13 @@ public:
         DEBUG("Set initial CCI signal value at %d", calc_idx);
         // cci_signal.setState(DBL_MIN);
         cci_signal.setState(cci_data.getState());
-        calcSignal(calc_idx + 1, open, high, low, close, volume);
+        calcSignal(calc_idx + 1, rates);
 
         double rslt = cci_signal.getState();
         DEBUG("Initial CCI signal value at %d: %f", calc_idx, rslt);
         cci_signal.set(calc_idx + 1, rslt);
 
-        calcSignal(calc_idx, open, high, low, close, volume);
+        calcSignal(calc_idx, rates);
         rslt = cci_signal.getState();
         DEBUG("Second CCI signal value at %d: %f", calc_idx, rslt);
         cci_signal.set(calc_idx, rslt);
@@ -178,20 +183,22 @@ public:
         return 2;
     };
 
-    void initIndicator()
+    virtual int initIndicator(const int start = 0)
     {
-        // FIXME update API : initIndicator => bool
-
-        PriceIndicator::initIndicator();
-
-        int idx = dataBufferCount() - 2;
-        SetIndexBuffer(idx, cci_data.data);
-        SetIndexLabel(idx, "CCI");
-        SetIndexStyle(idx++, DRAW_LINE);
-
-        SetIndexBuffer(idx, cci_signal.data);
-        SetIndexLabel(idx, "CCI S");
-        SetIndexStyle(idx, DRAW_LINE);
+        if (!PriceIndicator::initIndicator())
+        {
+            return -1;
+        }
+        int idx = start;
+        if (!initBuffer(idx++, cci_data.data, "CCI"))
+        {
+            return -1;
+        }
+        if (!initBuffer(idx++, cci_signal.data, "CCI S"))
+        {
+            return -1;
+        }
+        return idx;
     }
 };
 

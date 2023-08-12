@@ -27,9 +27,9 @@
 #property indicator_width4 1
 #property indicator_style4 STYLE_DOT
 
-#property indicator_color5 clrLimeGreen
-#property indicator_width5 1
-#property indicator_style5 STYLE_DOT
+// #property indicator_color5 clrLimeGreen
+// #property indicator_width5 1
+// #property indicator_style5 STYLE_DOT
 
 
 #property indicator_level1     20.0
@@ -46,8 +46,10 @@ ADXData *adx_data;
 int OnInit()
 {
   adx_data = new ADXData(iadx_period, iadx_period_shift, iadx_price_mode, _Symbol, _Period);
-  adx_data.initIndicator();
-  return (INIT_SUCCEEDED);
+  if (adx_data.initIndicator() == -1) {
+    return INIT_FAILED;
+  }
+  return INIT_SUCCEEDED;
 }
 
 int OnCalculate(const int rates_total,
@@ -61,16 +63,7 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-  if (prev_calculated == 0)
-  {
-    DEBUG("initializing for %d quotes", rates_total);
-    adx_data.initVars(rates_total, open, high, low, close, tick_volume, 0);
-  }
-  else
-  {
-    adx_data.updateVars(open, high, low, close, tick_volume, EMPTY, 0);
-  }
-  return rates_total;
+  return adx_data.calculate(rates_total, prev_calculated);
 }
 
 void OnDeinit(const int dicode)

@@ -39,7 +39,7 @@ int timeframe_short_bars(const int timeframe = EMPTY) {
       // hours for 1 market week (five days)
       return 120;
     case PERIOD_H4:
-      // 1/6 day periods for 1 month of market weeks, approx
+      // 1/6-day periods for 1 month of market weeks, approx
       return 120;
     case PERIOD_D1:
       // days for 1 month of market weeks, approx

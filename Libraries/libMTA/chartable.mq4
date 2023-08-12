@@ -6,9 +6,6 @@
 #property library
 #property strict
 
-#include <libMql4.mq4>
-#include <pricemode.mq4>
-
 union Timeframe // for purpose of testing
 {
     ENUM_TIMEFRAMES timeframe;
