@@ -45,7 +45,7 @@ MACDData *macd_in;
 int OnInit()
 {
   macd_in = new MACDData(macd_fast_ema, macd_slow_ema, macd_signal_ema, macd_price_mode, _Symbol, _Period);
-  if (!macd_in.initIndicator() == -1) {
+  if (macd_in.initIndicator() == -1) {
     return INIT_FAILED;
   }
   return (INIT_SUCCEEDED);
