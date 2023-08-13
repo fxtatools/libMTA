@@ -85,7 +85,7 @@ class HPIData : public PriceIndicator
 {
 protected:
     PriceBuffer *hpi_buf; // buffer for HPI EMA
-    PriceBuffer *hpp_buf; // percentage change in HPI
+    const int ema_shift;
 
 public:
     const int hpi_period;     // HPI EMA period
@@ -93,15 +93,16 @@ public:
 
     HPIData(const int period = 6,
             const int price_mode = PRICE_TYPICAL,
+            const int _ema_shift = EMPTY,
             const string _symbol = NULL,
             const int _timeframe = EMPTY,
             const string _name = "HPI",
-            const int _nr_buffers = 3) : hpi_period(period),
+            const int _nr_buffers = 1) : hpi_period(period),
                                          hpi_price_mode(price_mode),
+                                         ema_shift(_ema_shift == EMPTY ? (int) floor(period / 2) : _ema_shift),
                                          PriceIndicator(_name, _nr_buffers, _symbol, _timeframe)
     {
         hpi_buf = price_mgr.primary_buffer;
-        hpp_buf = dynamic_cast<PriceBuffer*>(hpi_buf.next_buffer);
     }
     ~HPIData()
     {
@@ -109,9 +110,9 @@ public:
         hpi_buf = NULL;
     }
 
-    virtual string indicatorName() const
+    virtual string indicatorName()
     {
-        return StringFormat("%s(%d)", name, hpi_period);
+        return StringFormat("%s(%d, %d)", name, hpi_period, ema_shift);
     }
 
     virtual int dataBufferCount()
@@ -165,7 +166,7 @@ public:
                 // This applies the inverse of the market's point ratio as an HPI
                 // conversion factor, in the adaptation for FX markets. This
                 // conversion is managed thorugh the pricePoints() function.
-                const double cur = pricePoints(r_cur.tick_volume * mdiff * (1 + (mdiff / fabs(mdiff)) * ((2 * fabs(pdiff)) / fmin(f_pre, f_cur))));
+                const double cur = pricePoints((double)r_cur.tick_volume * mdiff * (1 + (mdiff / fabs(mdiff)) * ((2 * fabs(pdiff)) / fmin(f_pre, f_cur))));
                 ma += (cur * wfactor);
             }
             weights += wfactor;
@@ -179,16 +180,9 @@ public:
         }
         else
         {
-            // TBD ...
-            hpp_buf.setState(ma);
-
-
-            //// alternately: Conventional EMA only
-            /*
-            const double rslt = emaShifted(pre, ma, hpi_period);
+            // shifted EMA retains some of the actual volatility of the initial value
+            const double rslt = emaShifted(pre, ma, hpi_period, ema_shift);
             hpi_buf.setState(rslt);
-            */
-
         }
     }
 
@@ -207,11 +201,7 @@ public:
             return -1;
         }
         int idx = start;
-        if (!initBuffer(idx++, hpp_buf.data, "%HPI"))
-        {
-            return -1;
-        }
-        if (!initBuffer(idx++, hpi_buf.data, NULL))
+        if (!initBuffer(idx++, hpi_buf.data, "HPI"))
         {
             return -1;
         }

@@ -11,13 +11,22 @@
 #include "libMql4.mq4"
 
 // Relative Vigor Index (adapted)
+//
 // Adaptations:
+// - for the calculation of the ratio of moving averages for A, the difference
+//   of close and open prices, over B, the difference of the high and low prices,
+//   when the high-low moving average B is zero, this adaptation will apply the
+//   unscaled difference of close and open prices within that period
+//
 // - supporting a calculation period other than 4, though using a weighting method
 //   generally similar to the four-period RVI
+//
 // - scaling the RVI value by a factor of 500, generally to an effect of a result
 //   resembling a percentage
+//
 // - adjusting the RVI value for a volume-weighted linear moving average of relative
 //   change in price
+//
 // - calculating a moving average of the intermediate value at main/signal crossover
 //   (not displayed)
 //
@@ -84,7 +93,7 @@ public:
         FREEPTR(xover);
     }
 
-    virtual string indicatorName() const
+    virtual string indicatorName()
     {
         return StringFormat("%s(%d, %d)", name, fill_period, signal_period);
     }
@@ -121,33 +130,6 @@ public:
     {
         MqlRates rate = rates[idx];
         return rate.high - rate.low;
-    }
-
-    // utility function for price-change adjustment for RVI
-    double chgAt(const int idx, MqlRates &rates[], const int period)
-    {
-        double diff = DBLZERO;
-        double weights = DBLZERO;
-
-        for (int n = idx + period - 1, p_k = 1; n >= idx; n--, p_k++)
-        {
-            /// using a linear weighting factor, for the moving average
-            /// of price change
-            const MqlRates cur = rates[n];
-            const double wfactor = weightFor(p_k, period) * cur.tick_volume;
-            const double p_far = priceFor(n + 1, price_mode, rates);
-            const double p_near = priceFor(cur, price_mode);
-            diff += (p_near - p_far) * wfactor;
-            weights += wfactor;
-        }
-        if (weights == DBLZERO)
-        {
-            return DBLZERO;
-        }
-        else
-        {
-            return diff / weights;
-        }
     }
 
     double numFor(const int idx, MqlRates &rates[])
@@ -219,9 +201,7 @@ public:
         const double rvi = calcRvi(idx, rates) * 500.0;
 
         // adaptation: factoring price change for RVI
-        const double chg = chgAt(idx, rates, fill_period);
-        const double p = priceFor(idx, PRICE_TYPICAL, rates);
-        const double cur_adj = ((rvi + (2.0 * (chg / p))) / 3.0);
+        const double cur_adj = priceAdjusted(rvi, idx, price_mode, rates, fill_period);
 
         rvi_buf.setState(cur_adj);
         rvi_buf.set(idx);

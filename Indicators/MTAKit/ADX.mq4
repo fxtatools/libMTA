@@ -9,7 +9,7 @@
 
 #property indicator_separate_window
 
-#property indicator_buffers 5 // number of drawn buffers
+#property indicator_buffers 4 // number of drawn buffers
 
 #property indicator_color1 clrYellow
 #property indicator_width1 1

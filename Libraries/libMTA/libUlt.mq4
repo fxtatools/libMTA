@@ -126,7 +126,7 @@ public:
         FREEPTR(ult_rev)
     }
 
-    virtual string indicatorName() const
+    virtual string indicatorName()
     {
         return StringFormat("%s(%d)", name, period_main);
     }

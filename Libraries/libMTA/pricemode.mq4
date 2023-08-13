@@ -28,11 +28,11 @@ enum ENUM_PRICE_MODE
 };
 
 double priceFor(const int idx,
-                 const int mode,
-                 const double &open[],
-                 const double &high[],
-                 const double &low[],
-                 const double &close[])
+                const int mode,
+                const double &open[],
+                const double &high[],
+                const double &low[],
+                const double &close[])
 {
     switch (mode)
     {
@@ -62,7 +62,8 @@ double priceFor(const int idx,
     }
 }
 
-double priceFor(const MqlRates &rinfo, const int mode) {
+double priceFor(const MqlRates &rinfo, const int mode)
+{
     switch (mode)
     {
     case PRICE_CLOSE:
@@ -91,19 +92,18 @@ double priceFor(const MqlRates &rinfo, const int mode) {
     }
 }
 double priceFor(const int idx,
-                 const int mode,
-                 MqlRates &rates[])
+                const int mode,
+                MqlRates &rates[])
 {
     const MqlRates rateinfo = rates[idx];
     return priceFor(rateinfo, mode);
 }
 
-// 
+//
 //
 //
 
-
-double trueRange(const int idx, const int price_mode, const double &open[], const double &high[], const double &low[], const double &close[], const int offset=1)
+double trueRange(const int idx, const int price_mode, const double &open[], const double &high[], const double &low[], const double &close[], const int offset = 1)
 {
     const double prev_price = priceFor(idx + offset, price_mode, open, high, low, close);
     const double cur_high = high[idx];
@@ -144,7 +144,7 @@ double trueRange(const int idx, const int price_mode, const double &open[], cons
 //
 // This function provides support for using an offset other than one,
 // for previous price.
-double trueRange(const int idx, const int price_mode, MqlRates &rates[], const int offset=1)
+double trueRange(const int idx, const int price_mode, MqlRates &rates[], const int offset = 1)
 {
     const double prev_price = priceFor(idx + offset, price_mode, rates);
     const MqlRates cur = rates[idx];
@@ -160,7 +160,6 @@ double trueRange(const int idx, const int price_mode, MqlRates &rates[], const i
     return MathMax(cur_high, prev_price) - MathMin(cur_low, prev_price);
 }
 
-
 double trueRange(const MqlRates &previous, const MqlRates &current, const int price_mode)
 {
     const double prev_price = priceFor(previous, price_mode);
@@ -174,6 +173,90 @@ double trueRange(const MqlRates &previous, const MqlRates &current, const int pr
     // adapted to add an option for using a price other than close,
     // for previous price
     return MathMax(cur_high, prev_price) - MathMin(cur_low, prev_price);
+}
+
+/// @brief return the average change in price over a provided period
+///
+/// @param idx index for the most recent chart point in the period
+/// @param price_mode integer denoting the mode for applied price
+/// @param rates array of current rate structures
+/// @param period period for the linear-weighted moving average
+//
+/// @return the volume-weighted linear moving average of change
+//   in price, from (idx - period - 1) to (idx)
+double priceChange(const int idx, const int price_mode, MqlRates &rates[], const int period)
+{
+    double diff = DBLZERO;
+    double weights = DBLZERO;
+    const double p_dbl = (double)period;
+    for (int n = idx + period - 1, p_k = 1; n >= idx; n--, p_k++)
+    {
+        const MqlRates cur = rates[n];
+        const double wfactor = ((double)p_k * (double)cur.tick_volume) / p_dbl;
+        const double p_near = priceFor(cur, price_mode);
+        const double p_far = priceFor(n + 1, price_mode, rates);
+        diff += (p_near - p_far) * wfactor;
+        weights += wfactor;
+    }
+    if (weights == DBLZERO)
+    {
+        return DBLZERO;
+    }
+    else
+    {
+        return diff / weights;
+    }
+}
+
+/// @brief return a value as adjusted for the volume-weighted linear mean of change in price
+///   to a provided chart point
+/// @param value generalized value to be adjusted for change in price
+/// @param idx effective index for the value, within rates data
+/// @param price_mode mode for applied price, in calculating change in price
+/// @param rates array of current rate structures
+/// @param period period for the calculation of change in price
+/// @param change_weight weight for change in price, in calculating the adjustment
+/// @param value_weight weight for the provided value, in calculating the adjustment
+/// @return the value as adjusted for change in price
+///
+/// @par References
+///
+/// "An Oscillator to Distinguish between Trending and Sideways Markets", by Perry J. Kaufman, from (2013).
+///   Momentum and Oscillators. In Trading Systems and Methods (5th ed.). Wiley. 408
+///
+double priceAdjusted(const double value, const int idx, const int price_mode, MqlRates &rates[], const int period, const double change_weight = 2.0, const double value_weight = 1.0)
+{
+    /// Originally ...
+    /*
+        const double chg = priceChange(idx, price_mode, rates, period);
+        const double p = priceFor(idx, price_mode, rates);
+        return ((value_weight * value) + (change_weight * ((p + chg) / (p - chg)))) / (value_weight + change_weight);
+    */
+    /// TBD
+    const double p_dbl = (double)period;
+    double cavg = DBLZERO;
+    double ravg = DBLZERO;
+    double weights = DBLZERO;
+    for (int n = idx + period - 1, p_k = 1; n >= idx; n--, p_k++)
+    {
+        // change factor : moving average of current close, previous close differences
+        // over the moving average of current high, current low differences
+        //
+        // or generally using a specified price mode, other than close
+        const MqlRates r_cur = rates[n];
+        const MqlRates r_pre = rates[n + 1];
+        const double wfactor = ((double)p_k * (double) r_cur.tick_volume) / p_dbl;
+        // cavg += r_cur.close - r_pre.close;
+        cavg += priceFor(r_cur, price_mode) - priceFor(r_pre, price_mode);
+        ravg += r_cur.high - r_cur.low;
+        weights += wfactor;
+    }
+    cavg /= weights;
+    ravg /= weights;
+    const double cfactor = cavg / ravg;
+    const double p = priceFor(idx, price_mode, rates);   
+    // return ((value_weight * value) + (change_weight * ((p + cfactor) / (p - cfactor)))) / (value_weight + change_weight);
+    return ((value_weight * value) + (change_weight * cfactor)) / (value_weight + change_weight);
 }
 
 #endif

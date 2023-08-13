@@ -104,7 +104,7 @@ public:
         return calc_idx;
     }
 
-    virtual int dataBufferCount() const
+    virtual int dataBufferCount()
     {
         // return the number of buffers used directly for this indicator.
         // should be incremented internally, in derived classes

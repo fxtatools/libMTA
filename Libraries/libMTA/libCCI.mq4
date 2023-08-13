@@ -79,13 +79,11 @@ public:
         double m = __dblzero__;
         for (int n = idx + mean_period - 1, p_k = 1; n >= idx; n--, p_k++)
         {
-            // const double wfactor = (double)p_k / m_dbl;
             const double wfactor = weightFor(p_k, mean_period);
             m += (priceFor(n, price_mode, rates) * wfactor);
             weights += wfactor;
         }
         m /= weights;
-        // const double m = mean(mean_period, price_mode, open, high, low, close, idx);
         DEBUG("CCI Mean at %d: %f", idx, m);
         const double sd = sdev(mean_period, price_mode, rates, idx, m);
         DEBUG("CCI SDev at %d: %f", idx, sd);
@@ -176,7 +174,7 @@ public:
         return calc_idx;
     }
 
-    virtual int dataBufferCount() const
+    virtual int dataBufferCount()
     {
         // return the number of buffers used directly for this indicator.
         // should be incremented internally, in derived classes

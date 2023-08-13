@@ -111,7 +111,7 @@ public:
         else
         {
             double si_ma = si;
-            double si_weights = si_in_weight_volume ? cur.tick_volume : 1.0;
+            double si_weights = si_in_weight_volume ? (double) cur.tick_volume : 1.0;
             for (int n = idx + si_period - 1, p_k = 1; n > idx; n--, p_k++)
             {
                 // volume weighting will produce a substantially different indicator graph, here
@@ -119,7 +119,7 @@ public:
                 if (n_si == EMPTY_VALUE)
                     continue;
                 const double rweight = weightFor(p_k, si_period);
-                const double wfactor = si_in_weight_volume ? rweight * rates[n].tick_volume : rweight;
+                const double wfactor = si_in_weight_volume ? rweight * (double) rates[n].tick_volume : rweight;
                 si_ma += (n_si * wfactor);
                 si_weights += wfactor;
             }

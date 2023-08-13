@@ -12,19 +12,15 @@
 
 #property indicator_separate_window
 
-// STO primary data
+// STO primary data (Series K)
 #property indicator_color1 clrMediumBlue
 #property indicator_width1 1
 #property indicator_style1 STYLE_SOLID
 
-// STO signal data
+// STO signal data (Series D)
 #property indicator_color2 clrFireBrick
 #property indicator_width2 1
 #property indicator_style2 STYLE_SOLID
-
-#property indicator_color3 clrGold
-#property indicator_width3 1
-#property indicator_style3 STYLE_DOT
 
 #property indicator_level1 0.0
 #property indicator_level2 - 50.0
@@ -32,22 +28,20 @@
 #property indicator_levelcolor clrDimGray
 #property indicator_levelstyle 2
 
-extern const int sto_k = 14; // K Period
-extern const int sto_d = 8;  // D Period
-extern const int sto_d_slow = 6;  // D Slow Period
+extern const int sto_k = 10; // K Period
+extern const int sto_d = 6;  // D Period
 extern const ENUM_APPLIED_PRICE sto_price_mode = PRICE_CLOSE; // Applied Price
 
-#include <../Libraries/libMTA/libSTO.mq4>
+#include <../Libraries/libMTA/libSto.mq4>
 
 StoData *sto_in;
 
 int OnInit()
 {
-    sto_in = new StoData(sto_k, sto_d, sto_d_slow, sto_price_mode,  _Symbol, _Period);
-
-    //// FIXME update API : initIndicator => bool
-    // if(sto_in.initIndicator()) ...
-    sto_in.initIndicator();
+    sto_in = new StoData(sto_k, sto_d, sto_price_mode,  _Symbol, _Period);
+    if (sto_in.initIndicator() == -1) {
+        return INIT_FAILED;
+    }
     return INIT_SUCCEEDED;
 }
 

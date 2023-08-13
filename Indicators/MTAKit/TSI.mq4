@@ -17,22 +17,17 @@
 
 extern int tsi_r = 10; // First Smoothing Period
 extern int tsi_s = 6;  // Second Smoothing Period
-// ^ TBD 6
 extern ENUM_APPLIED_PRICE tsi_price_mode = PRICE_TYPICAL; // Applied Price
 
 #include <../Libraries/libMTA/indicator.mq4>
 
 /// @brief Adaptation of William Blau's True Strength Index
 ///
-/// @par Known Limitations
-//
-//  ...
-//
-// @par References
-//
-// Kaufman, P. J. (2013). Momentum and Oscillators. In Trading Systems
-//  and Methods (5th ed.). Wiley. 404-405
-//
+/// @par References
+///
+/// Kaufman, P. J. (2013). Momentum and Oscillators. In Trading Systems
+///    and Methods (5th ed.). Wiley. 404-405
+///
 class TSIData : public PriceIndicator
 {
 protected:
@@ -66,7 +61,7 @@ public:
         FREEPTR(tsi_rev);
     }
 
-    string indicatorName()
+    virtual string indicatorName()
     {
         return StringFormat("%s(%d, %d)", name, r_period, s_period);
     }
@@ -81,18 +76,19 @@ public:
         double s_weights = DBLZERO;
         for (int n_s = idx + s_period - 1, f_s = 1; n_s >= idx; n_s--, f_s++)
         {
-            const double wfactor_s = weightFor(f_s, s_period); // * rates[n_s].tick_volume;
+            const double wfactor_s = weightFor(f_s, s_period) * (double) rates[n_s].tick_volume;
 
             double r_sum = DBLZERO;
             double r_abs_sum = DBLZERO;
             double r_weights = DBLZERO;
+            const double sd = sdev(s_period, price_mode, rates, n_s);
             for (int n_r = n_s + r_period - 1, f_r = 1; n_r >= idx; n_r--, f_r++)
             {
                 const MqlRates cur = rates[n_r];
                 const MqlRates pre = rates[n_r + 1];
-                const double wfactor = weightFor(f_r, r_period); // * (double) cur.tick_volume;
+                const double wfactor = weightFor(f_r, r_period) * (double) cur.tick_volume;
                 const double rchg = priceFor(cur, price_mode) - priceFor(pre, price_mode);
-                const double rfactored = rchg * wfactor;
+                const double rfactored = dblZero(sd) ?  (rchg * wfactor) : (rchg * wfactor) / sd;
                 r_sum += rfactored;
                 r_abs_sum += fabs(rfactored);
                 r_weights += wfactor;
@@ -104,27 +100,14 @@ public:
         s_ma /= s_weights;
         s_abs_ma /= s_weights;
 
-        const double tsi = (100 * s_ma) / s_abs_ma;
+        const double tsi = dblZero(s_abs_ma) ? (100 * s_ma) :  (100 * s_ma) / s_abs_ma;
 
         DEBUG("TSI [%d] %f", idx, tsi);
 
         tsi_data.setState(tsi);
 
         const double pre = tsi_data.getState();
-        // EMA smoothing for the indicator (FIXME insufficient in itself - use LWMA)
-        /*
-        if (pre == EMPTY_VALUE || dblZero(pre))
-        {
-            tsi_data.setState(tsi);
-        }
-        else
-        {
-            const double nxt = ema(pre, tsi, ema_period);
-            tsi_data.setState(nxt);
-        }
-        */
-
-        // volume-weighted LWMA at half the main period, or half + 1 if main period is odd.
+        // volume-weighted LWMA at the ceil of half the sum of r and s periods
         const int period_ma = (int) ceil(r_period + s_period / 2.0);
         const double cur_weight = 2 * (double) rates[idx].tick_volume;
         const double pre_weight = (double) rates[idx + 1].tick_volume;
@@ -155,7 +138,7 @@ public:
         const double tsi_mid = tsi_data.get(idx + 1);
         if (tsi_mid == EMPTY_VALUE)
             return;
-        const double rev_pre = tsi_rev.getState();  
+        const double rev_pre = tsi_rev.getState();
         if (((tsi_far <= tsi_mid) && (tsi_mid > tsi)) || ((tsi_far >= tsi_mid) && (tsi_mid < tsi)))
         {
             const double rev_cur = (tsi_far + tsi_mid + tsi) / 3.0;
@@ -192,21 +175,12 @@ public:
 
 TSIData *tsi_data;
 
-// Using a non-const MqlRates[]
-// part of a normative API for providing quote data to indicators,
-// with or without the call placed in an indicator event function
-//
-// MqlRates rateinfo[];
-
 int OnInit()
 {
     tsi_data = new TSIData(tsi_r, tsi_s, tsi_price_mode, _Symbol, _Period);
-
-    // ArraySetAsSeries(rateinfo, true);
-
-    //// FIXME update API : initIndicator => bool
-    // return tsi_data.initIndicator();
-    tsi_data.initIndicator();
+    if (tsi_data.initIndicator() == -1) {
+        return INIT_FAILED;
+    };
     return INIT_SUCCEEDED;
 }
 
@@ -228,5 +202,4 @@ int OnCalculate(const int rates_total,
 void OnDeinit(const int dicode)
 {
     FREEPTR(tsi_data);
-    // ArrayFree(rateinfo);
 }

@@ -248,14 +248,14 @@ public:
     PriceBuffer *xbuff;
     PriceBuffer *rebuff;
 
-    virtual int dataBufferCount() const
+    virtual int dataBufferCount()
     {
         // return the number of buffers used directly for this indicator.
         // should be incremented internally, in derived classes
         return ATRData::dataBufferCount() + 7;
     };
 
-    virtual string indicator_name() const
+    virtual string indicator_name()
     {
         return StringFormat("%s(%d, %d)", name, ema_period, ema_shift);
     };

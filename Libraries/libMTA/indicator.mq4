@@ -65,19 +65,19 @@ public:
     //
     // This value should be incremented internally, in classes
     // derived from an indicator implementation
-    virtual int dataBufferCount() const
+    virtual int dataBufferCount()
     {
         return nr_buffers;
     };
 
     // return the number of quotes processed by this indicator
-    virtual int getRatesCount() const
+    virtual int getRatesCount()
     {
         return price_mgr.extent;
     };
 
     // return the indicator's display name
-    virtual string indicatorName() const
+    virtual string indicatorName()
     {
         return name;
     };
@@ -209,9 +209,14 @@ public:
     // @return false if indicator buffers could not be allocated, else true
     virtual bool initIndicator()
     {
+        DEBUG(indicatorName() + ": Initializing indicator");
+        if (!IndicatorBuffers(dataBufferCount())) {
+            printf(indicatorName() + " " + __FUNCSIG__ + ": Failed to initialize indicator");
+            return false;
+        }
         IndicatorShortName(indicatorName());
         IndicatorDigits(market_digits);
-        return IndicatorBuffers(dataBufferCount());
+        return true;
     };
 
     /// @brief Utility method for indicator buffer initialization
@@ -226,6 +231,7 @@ public:
         const ENUM_INDEXBUFFER_TYPE _kind = (kind == EMPTY) ? (label == NULL ? INDICATOR_CALCULATIONS : INDICATOR_DATA) : kind;
         const int _style = (style == EMPTY) ? (label == NULL ? DRAW_NONE : DRAW_LINE) : style;
 
+        DEBUG("Initializing %s buffer [%d]", (label == NULL ? "(Unnamed)" : name), index);
         if (!SetIndexBuffer(index, data, _kind))
         {
             printf(indicatorName() + ": Unable to set %s indicator buffer for index %d", (label == NULL ? "(Unnamed)" : name), index);
@@ -256,6 +262,7 @@ public:
         DEBUG(indicatorName() + " Updating to index %d", update_idx);
         if (update_idx > price_mgr.extent)
         {
+            setExtent(update_idx, 0);
         }
 
         // restore previous calculation state

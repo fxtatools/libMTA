@@ -10,7 +10,7 @@
 #property library
 #property strict
 
-#include <libMQL4.mq4>
+#include "libMQL4.mq4"
 
 #include "indicator.mq4"
 
@@ -142,12 +142,12 @@ public:
         atr_buffer = NULL;
     }
 
-    virtual string indicatorName() const
+    virtual string indicatorName()
     {
         return StringFormat("%s(%d, %d)", name, ema_period, ema_shift);
     };
 
-    virtual int dataBufferCount() const
+    virtual int dataBufferCount()
     {
         // return the number of buffers used directly for this indicator.
         // should be incremented internally, in derived classes

@@ -34,8 +34,8 @@
 #property indicator_levelcolor clrDimGray
 #property indicator_levelstyle 2
 
-extern const int rvi_fill_period = 4; // Fill period for price data
-extern const int rvi_xma_period = 10; // MA for Crossover
+extern const int rvi_fill_period = 10; // Main period
+extern const int rvi_signal_period = 5; // Signal Period
 extern const ENUM_APPLIED_PRICE rvi_price_mode = PRICE_TYPICAL; // Applied Price
 
 
@@ -45,7 +45,7 @@ RVIData *rvi_in;
 
 int OnInit()
 {
-    rvi_in = new RVIData(rvi_fill_period, rvi_xma_period, rvi_price_mode,  _Symbol, _Period);
+    rvi_in = new RVIData(rvi_fill_period, rvi_signal_period, rvi_price_mode,  _Symbol, _Period);
     if (rvi_in.initIndicator() == -1) {
         return INIT_FAILED;
     }

@@ -21,6 +21,7 @@
 #property indicator_levelcolor clrDarkSlateGray
 
 extern const int hpi_period = 6;                              // HPI Period
+extern const int hpi_ema_shift = 3;                           // HPI EMA shift
 extern const ENUM_APPLIED_PRICE hpi_price_mode = PRICE_CLOSE; // Applied Price
 
 #include <../Libraries/libMTA/libHPI.mq4>
@@ -29,7 +30,7 @@ HPIData *hpi;
 
 int OnInit()
 {
-    hpi = new HPIData(hpi_period, hpi_price_mode, _Symbol, _Period);
+    hpi = new HPIData(hpi_period, hpi_price_mode, hpi_ema_shift, _Symbol, _Period);
     if (hpi.initIndicator() == -1) {
         return INIT_FAILED;
     };
