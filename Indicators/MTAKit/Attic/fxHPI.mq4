@@ -6,8 +6,6 @@
 
 #property strict
 
-// FIXME rename file => fxHPI.mq4
-
 #property description "Herrick Payoff Index, adapted for FX markets"
 
 #property indicator_buffers 1
@@ -20,7 +18,7 @@
 #property indicator_level1 0.0
 #property indicator_levelcolor clrDarkSlateGray
 
-extern const int hpi_period = 6;                              // HPI Period
+extern const int hpi_period = 10;                             // HPI Period
 extern const int hpi_ema_shift = 3;                           // HPI EMA shift
 extern const ENUM_APPLIED_PRICE hpi_price_mode = PRICE_CLOSE; // Applied Price
 
@@ -31,7 +29,8 @@ HPIData *hpi;
 int OnInit()
 {
     hpi = new HPIData(hpi_period, hpi_price_mode, hpi_ema_shift, _Symbol, _Period);
-    if (hpi.initIndicator() == -1) {
+    if (hpi.initIndicator() == -1)
+    {
         return INIT_FAILED;
     };
     return INIT_SUCCEEDED;
