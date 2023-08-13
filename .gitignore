@@ -9,3 +9,4 @@
 *.rej
 *.pdf
 *.png
+**/html/
