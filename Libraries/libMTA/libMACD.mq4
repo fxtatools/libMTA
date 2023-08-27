@@ -27,13 +27,13 @@ public:
     const int price_mode;
 
     // local reference for indicator data buffers
-    PriceBuffer *fast_ema_buf;
-    PriceBuffer *slow_ema_buf;
-    PriceBuffer *macd_buf;
-    PriceBuffer *signal_buf;
+    ValueBuffer<double> *fast_ema_buf;
+    ValueBuffer<double> *slow_ema_buf;
+    ValueBuffer<double> *macd_buf;
+    ValueBuffer<double> *signal_buf;
     // graphing buffers for macd/signal difference
-    PriceBuffer *splus_buf;
-    PriceBuffer *sminus_buf;
+    ValueBuffer<double> *splus_buf;
+    ValueBuffer<double> *sminus_buf;
 
     MACDData(const int fast_ema,
              const int slow_ema,
@@ -41,25 +41,26 @@ public:
              const int _price_mode,
              const string _symbol = NULL,
              const int _timeframe = EMPTY,
+             const bool _managed = true,
              const string _name = "MACD++",
              const int _data_shift = EMPTY,
-             const int _nr_buffers = 6) : fast_p(fast_ema),
+             const int _nr_buffers = EMPTY) : fast_p(fast_ema),
                                           slow_p(slow_ema),
                                           fast_p_larger(fast_ema > slow_ema),
                                           signal_p(signal_ema),
                                           price_mode(_price_mode),
-                                          PriceIndicator(_name,
-                                                         _nr_buffers,
-                                                         _symbol,
-                                                         _timeframe,
+                                          PriceIndicator(_managed, _name,
+                                                         _nr_buffers == EMPTY ? classBufferCount() : _nr_buffers,
+                                                         _symbol, _timeframe,
                                                          (_data_shift == EMPTY ? signal_p + (fast_p_larger ? fast_p : slow_p) : _data_shift))
     {
-        fast_ema_buf = dynamic_cast<PriceBuffer *>(price_mgr.primary_buffer);
-        slow_ema_buf = dynamic_cast<PriceBuffer *>(fast_ema_buf.next_buffer);
-        macd_buf = dynamic_cast<PriceBuffer *>(slow_ema_buf.next_buffer);
-        signal_buf = dynamic_cast<PriceBuffer *>(macd_buf.next_buffer);
-        splus_buf = dynamic_cast<PriceBuffer *>(signal_buf.next_buffer);
-        sminus_buf = dynamic_cast<PriceBuffer *>(splus_buf.next_buffer);
+        int idx = 0;
+        fast_ema_buf = data_buffers.get(idx++);
+        slow_ema_buf = data_buffers.get(idx++);
+        macd_buf = data_buffers.get(idx++);
+        signal_buf = data_buffers.get(idx++);
+        splus_buf = data_buffers.get(idx++);
+        sminus_buf = data_buffers.get(idx++);
     };
     ~MACDData()
     {
@@ -72,7 +73,7 @@ public:
         sminus_buf = NULL;
     };
 
-    string indicatorName() const
+    string indicatorName()
     {
         return StringFormat("%s(%d, %d, %d)", name, fast_p, slow_p, signal_p);
     }
@@ -80,6 +81,10 @@ public:
     virtual int dataShift()
     {
         return data_shift;
+    }
+
+    int classBufferCount() {
+        return 6;
     }
 
     double mean(const int period, const int idx, MqlRates &rates[])
@@ -175,10 +180,12 @@ public:
         const int start_idx = _extent - (slowest_p + signal_p + 1);
         // fillState(start_idx + 1, extent - 1, EMPTY_VALUE);
         // bindMacd(start_idx, open, high, low, close);
-        splus_buf.setState(EMPTY_VALUE);
-        sminus_buf.setState(EMPTY_VALUE);
-        fast_ema_buf.setState(mean(fast_p, start_idx, rates));
-        slow_ema_buf.setState(mean(slow_p, start_idx, rates));
+        splus_buf.setState(DBLEMPTY);
+        sminus_buf.setState(DBLEMPTY);
+        const double _m_fast =mean(fast_p, start_idx, rates); 
+        fast_ema_buf.setState(_m_fast);
+        const double _m_slow = mean(slow_p, start_idx, rates);
+        slow_ema_buf.setState(_m_slow);
         // macd_buf.setState(_avg);
         macd_buf.setState(DBLZERO);
         signal_buf.setState(DBLZERO);
@@ -187,42 +194,41 @@ public:
     };
 
     // restore buffer state, converting points values from data buffers to price values
-    virtual void restoreState(const int idx)
+    virtual void restoreFrom(const int idx)
     {
-        fast_ema_buf.setState(fast_ema_buf.get(idx));
-        slow_ema_buf.setState(slow_ema_buf.get(idx));
-        macd_buf.setState(pointsPrice(macd_buf.get(idx)));
-        signal_buf.setState(pointsPrice(signal_buf.get(idx)));
+        const double _ema_f = fast_ema_buf.get(idx);
+        fast_ema_buf.setState(_ema_f);
+        const double _ema_s= slow_ema_buf.get(idx);
+        slow_ema_buf.setState(_ema_s);
+        const double _m = pointsPrice(macd_buf.get(idx));
+        macd_buf.setState(_m);
+        const double _s = pointsPrice(signal_buf.get(idx));
+        signal_buf.setState(_s);
     }
 
     // store buffer state in indicator data buffers, adding MACD/signal difference
     // and converting price values to points
     virtual void storeState(const int idx)
     {
-        fast_ema_buf.set(idx, fast_ema_buf.getState());
-        slow_ema_buf.set(idx, slow_ema_buf.getState());
+        const double _f_e = fast_ema_buf.getState();
+        fast_ema_buf.storeState(idx, _f_e);
+        const double _s_e = slow_ema_buf.getState();
+        slow_ema_buf.storeState(idx, _s_e);
         const double macd = pricePoints(macd_buf.getState());
         const double signal = pricePoints(signal_buf.getState());
-        macd_buf.set(idx, macd);
-        signal_buf.set(idx, signal);
+        macd_buf.storeState(idx, macd);
+        signal_buf.storeState(idx, signal);
         const double sdiff = macd - signal;
         if (sdiff >= 0)
         {
-            splus_buf.set(idx, sdiff);
-            sminus_buf.set(idx, EMPTY_VALUE);
+            splus_buf.storeState(idx, sdiff);
+            sminus_buf.storeState(idx, DBLEMPTY);
         }
         else
         {
-            sminus_buf.set(idx, sdiff);
-            splus_buf.set(idx, EMPTY_VALUE);
+            sminus_buf.storeState(idx, sdiff);
+            splus_buf.storeState(idx, DBLEMPTY);
         }
-    };
-
-    virtual int dataBufferCount()
-    {
-        // return the number of buffers used directly for this indicator.
-        // should be incremented internally, in derived classes
-        return 6;
     };
 
     // initialize indicator buffers
@@ -230,25 +236,31 @@ public:
     {
         PriceIndicator::initIndicator();
         int idx = start;
-        if (!initBuffer(idx++, splus_buf.data, "Signal+", DRAW_HISTOGRAM)) {
+        if (!initBuffer(idx++, splus_buf.data, "Signal+", DRAW_HISTOGRAM))
+        {
             return -1;
         }
-        if (!initBuffer(idx++, sminus_buf.data, "Signal-", DRAW_HISTOGRAM)) {
+        if (!initBuffer(idx++, sminus_buf.data, "Signal-", DRAW_HISTOGRAM))
+        {
             return -1;
         }
-        if (!initBuffer(idx++, macd_buf.data, "MACD")) {
+        if (!initBuffer(idx++, macd_buf.data, "MACD"))
+        {
             return -1;
         }
-        if (!initBuffer(idx++, signal_buf.data, "Signal")) {
+        if (!initBuffer(idx++, signal_buf.data, "Signal"))
+        {
             return -1;
         }
         ///
         /// non-drawn buffers
         ///
-        if (!initBuffer(idx++, slow_ema_buf.data, NULL)) {
+        if (!initBuffer(idx++, slow_ema_buf.data, NULL))
+        {
             return -1;
         }
-        if (!initBuffer(idx++, fast_ema_buf.data, NULL)) {
+        if (!initBuffer(idx++, fast_ema_buf.data, NULL))
+        {
             return -1;
         }
         return idx;

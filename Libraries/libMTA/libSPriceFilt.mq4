@@ -75,7 +75,7 @@ public:
                                           earliest_dt(0),
                                           PriceIndicator(_managed, _name, 0)
     {
-        pf = new PriceFilter(price_mode, getChartInfo(), "PF", true, managed_p);
+        pf = new PriceFilter(price_mode, THIS_CAST(Chartable), "PF", true, managed_p);
         sp = new SmoothedPrice(period, "SP", pf);
         data_buffers.push(pf);
         data_buffers.push(sp);

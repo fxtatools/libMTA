@@ -36,9 +36,9 @@ class RVIData : public PriceIndicator
 {
 
 protected:
-    PriceBuffer *rvi_buf;        // RVI buffer
-    PriceBuffer *rvi_signal_buf; // RVI signal buffer
-    PriceBuffer *xma_buf;        // TBD. Buffer for SMA of rate at crossover
+    ValueBuffer<double> *rvi_buf;        // RVI buffer
+    ValueBuffer<double> *rvi_signal_buf; // RVI signal buffer
+    ValueBuffer<double> *xma_buf;        // TBD. Buffer for SMA of rate at crossover
     PriceXOver *xover;
 
     /// @brief utility function or weighting in a manner generally similar to the
@@ -72,16 +72,21 @@ public:
             const int _price_mode = PRICE_TYPICAL,
             const string _symbol = NULL,
             const int _timeframe = EMPTY,
+            const bool _managed = true,
             const string _name = "RVI",
             const int _data_shift = EMPTY,
-            const int _nr_buffers = 3) : fill_period(fill),
-                                         signal_period(signal),
-                                         price_mode(_price_mode),
-                                         PriceIndicator(_name, _nr_buffers, _symbol, _timeframe, _data_shift == EMPTY ? fill + signal + 1 : _data_shift)
+            const int _nr_buffers = EMPTY) : fill_period(fill),
+                                             signal_period(signal),
+                                             price_mode(_price_mode),
+                                             PriceIndicator(_managed, _name,
+                                                            _nr_buffers == EMPTY ? classBufferCount() : _nr_buffers,
+                                                            _symbol, _timeframe,
+                                                            _data_shift == EMPTY ? fill + signal + 1 : _data_shift)
     {
-        rvi_buf = price_mgr.primary_buffer;
-        rvi_signal_buf = dynamic_cast<PriceBuffer *>(rvi_buf.next_buffer);
-        xma_buf = dynamic_cast<PriceBuffer *>(rvi_signal_buf.next_buffer);
+        int idx = 0;
+        rvi_buf = data_buffers.get(idx++);
+        rvi_signal_buf = data_buffers.get(idx++);
+        xma_buf = data_buffers.get(idx++);
         xover = new PriceXOver();
     }
     ~RVIData()
@@ -98,16 +103,15 @@ public:
         return StringFormat("%s(%d, %d)", name, fill_period, signal_period);
     }
 
-    virtual int dataBufferCount()
+    int classBufferCount()
     {
         return 3;
     }
 
     virtual int indicatorUpdateShift(const int idx)
     {
-        const int ext = price_mgr.extent;
         double pre = DBLZERO;
-        for (int n = idx + 1; n < ext; n++)
+        for (int n = idx + 1; n < extent; n++)
         {
             pre = xma_buf.get(n);
             if (pre != EMPTY_VALUE)
@@ -118,6 +122,25 @@ public:
         }
         // default, when no previous XMA value
         return idx + dataShift() + 1;
+    }
+
+    double valueAt(const int idx)
+    {
+        return rvi_buf.get(idx);
+    }
+    double signalAt(const int idx)
+    {
+        return rvi_signal_buf.get(idx);
+    }
+
+    void bindMax(PriceReversal &_revinfo, const int begin = 0, const int end = EMPTY, const double limit = DBL_MAX)
+    {
+        _revinfo.bindMax(rvi_buf, this, begin, end, limit);
+    }
+
+    void bindMin(PriceReversal &_revinfo, const int begin = 0, const int end = EMPTY, const double limit = DBL_MIN)
+    {
+        _revinfo.bindMin(rvi_buf, this, begin, end, limit);
     }
 
     double numAt(const int idx, MqlRates &rates[])
@@ -168,7 +191,7 @@ public:
         const double dsum = denomFor(idx, rates);
         if (dblZero(dsum))
         {
-            return DBLZERO;
+            return nsum / DBL_EPSILON;
         }
         return nsum / dsum;
     }
@@ -198,13 +221,11 @@ public:
 
     void calcMain(const int idx, MqlRates &rates[])
     {
-        const double rvi = calcRvi(idx, rates) * 500.0;
-
-        // adaptation: factoring price change for RVI
-        const double cur_adj = priceAdjusted(rvi, idx, price_mode, rates, fill_period);
-
-        rvi_buf.setState(cur_adj);
-        rvi_buf.set(idx);
+        const double rvi_pre = rvi_buf.getState();
+        const double rvi = calcRvi(idx, rates) * 100.0;
+        const double rvi_ema = rvi_pre == EMPTY_VALUE ? rvi : ema(rvi, rvi_pre, fill_period);
+        rvi_buf.setState(rvi_ema);
+        rvi_buf.storeState(idx);
 
         const double s_state = rvi_signal_buf.getState();
         if (s_state == EMPTY_VALUE)
@@ -237,18 +258,18 @@ public:
         // intermediate crossover
         ////
         const double s = rvi_signal_buf.getState();
-        const double rvi_pre = rvi_buf.get(idx + 1);
+        // const double rvi_pre = rvi_buf.get(idx + 1);
         const double s_pre = rvi_signal_buf.get(idx + 1);
         bool bearish = false;
 
-        if (s_pre > rvi_pre && s < cur_adj)
+        if (s_pre > rvi_pre && s < rvi_ema)
         {
             bearish = true;
         }
-        else if (!(s_pre < rvi_pre && s > cur_adj))
+        else if (!(s_pre < rvi_pre && s > rvi_ema))
         {
             /// for section plot:
-            xma_buf.setState(EMPTY_VALUE);
+            xma_buf.setState(DBLEMPTY);
             /// for histogram plot:
             // xma_buf.setState(xma_buf.get(idx + 1));
             return;
@@ -256,11 +277,10 @@ public:
 
         const datetime t = offset_time(idx, symbol, timeframe);
         const datetime t_pre = offset_time(idx + 1, symbol, timeframe);
-        xover.bind(cur_adj, rvi_pre, s, s_pre, t, t_pre);
+        xover.bind(rvi_ema, rvi_pre, s, s_pre, t, t_pre);
 
         double pre = EMPTY_VALUE;
-        const int ext = price_mgr.extent;
-        for (int n = idx + 1; n < ext; n++)
+        for (int n = idx + 1; n < extent; n++)
         {
             pre = xma_buf.get(n);
             if (pre != EMPTY_VALUE)
@@ -270,12 +290,14 @@ public:
         }
         if (pre == EMPTY_VALUE)
         {
-            xma_buf.setState(xover.rate());
+            const double _r = xover.rate();
+            xma_buf.setState(_r);
         }
         else
         {
             const double cur = xover.rate();
-            xma_buf.setState(emaShifted(pre, cur, signal_period, (double)signal_period / 2.0));
+            const double _e = emaShifted(pre, cur, signal_period, (double)signal_period / 2.0);
+            xma_buf.setState(_e);
         }
     }
 
@@ -288,7 +310,7 @@ public:
         {
             const double rvi = calcRvi(n, rates);
             rvi_buf.setState(rvi);
-            rvi_buf.set(n);
+            rvi_buf.storeState(n);
         }
         DEBUG("Calculating RVI Signal");
         const double s = calcRviSignal(calc_idx, rates);

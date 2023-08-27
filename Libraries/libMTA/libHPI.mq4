@@ -84,25 +84,35 @@
 class HPIData : public PriceIndicator
 {
 protected:
-    PriceBuffer *hpi_buf; // buffer for HPI EMA
+    ValueBuffer<double> *hpi_buf; // buffer for HPI EMA
     const int ema_shift;
 
 public:
     const int hpi_period;     // HPI EMA period
     const int hpi_price_mode; // Price mode for the FX adpated HPI
 
+    static int classBufferCount()
+    {
+        return 1;
+    }
+
     HPIData(const int period = 6,
             const int price_mode = PRICE_TYPICAL,
             const int _ema_shift = EMPTY,
             const string _symbol = NULL,
             const int _timeframe = EMPTY,
+            const bool _managed = true,
             const string _name = "HPI",
-            const int _nr_buffers = 1) : hpi_period(period),
-                                         hpi_price_mode(price_mode),
-                                         ema_shift(_ema_shift == EMPTY ? (int) floor(period / 2) : _ema_shift),
-                                         PriceIndicator(_name, _nr_buffers, _symbol, _timeframe)
+            const int _data_shift = EMPTY,
+            const int _nr_buffers = EMPTY) : hpi_period(period),
+                                             hpi_price_mode(price_mode),
+                                             ema_shift(_ema_shift == EMPTY ? (int)floor(period / 2) : _ema_shift),
+                                             PriceIndicator(_managed, _name,
+                                                            _nr_buffers == EMPTY ? classBufferCount() : _nr_buffers,
+                                                            _symbol, _timeframe,
+                                                            _data_shift == EMPTY ? dataShift() : _data_shift)
     {
-        hpi_buf = price_mgr.primary_buffer;
+        hpi_buf = data_buffers.get(0);
     }
     ~HPIData()
     {
@@ -113,11 +123,6 @@ public:
     virtual string indicatorName()
     {
         return StringFormat("%s(%d, %d)", name, hpi_period, ema_shift);
-    }
-
-    virtual int dataBufferCount()
-    {
-        return 1;
     }
 
     virtual int dataShift()
@@ -166,7 +171,7 @@ public:
                 // This applies the inverse of the market's point ratio as an HPI
                 // conversion factor, in the adaptation for FX markets. This
                 // conversion is managed thorugh the pricePoints() function.
-                const double cur = pricePoints((double)r_cur.tick_volume * mdiff * (1 + (mdiff / fabs(mdiff)) * ((2 * fabs(pdiff)) / fmin(f_pre, f_cur))));
+                const double cur = (double)r_cur.tick_volume * mdiff * (1 + (mdiff / fabs(mdiff)) * ((2 * fabs(pdiff)) / fmin(f_pre, f_cur)));
                 ma += (cur * wfactor);
             }
             weights += wfactor;
@@ -189,7 +194,7 @@ public:
     int calcInitial(const int _extent, MqlRates &rates[])
     {
         const int calc_idx = _extent - 1 - HPIData::dataShift();
-        hpi_buf.setState(EMPTY_VALUE);
+        hpi_buf.setState(DBLEMPTY);
         calcMain(calc_idx, rates);
         return calc_idx;
     }

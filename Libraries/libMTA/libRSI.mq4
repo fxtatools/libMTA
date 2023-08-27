@@ -7,32 +7,39 @@
 #property strict
 
 #include "indicator.mq4"
+#include "trend.mq4"
+
+#ifndef RSI_CENTER
+#define RSI_CENTER 50.0
+#endif
 
 /// @brief RSI Indicator
 class RSIData : public PriceIndicator
 {
 protected:
-    PriceBuffer *rsi_data;
+    ValueBuffer<double> *rsi_data;
 
 public:
     const int ma_period;
     const int price_mode;
 
     RSIData(const int _ma_period,
-                 const int _price_mode,
-                 const string _symbol = NULL,
-                 const int _timeframe = EMPTY,
-                 const string _name = "RSI++",
-                 const int _nr_buffers = 1,
-                 const int _data_shift = EMPTY) : ma_period(_ma_period),
-                                                  price_mode(_price_mode),
-                                                  PriceIndicator(_name,
-                                                                 _nr_buffers,
-                                                                 _symbol,
-                                                                 _timeframe,
-                                                                 _data_shift == EMPTY ? _ma_period : _data_shift)
+            const int _price_mode,
+            const string _symbol = NULL,
+            const int _timeframe = EMPTY,
+            const bool _managed = true,
+            const string _name = "RSI++",
+            const int _nr_buffers = EMPTY,
+            const int _data_shift = EMPTY) : ma_period(_ma_period),
+                                             price_mode(_price_mode),
+                                             PriceIndicator(_managed,
+                                                            _name,
+                                                              _nr_buffers == EMPTY ? classBufferCount() : _nr_buffers,
+                                                            _symbol,
+                                                            _timeframe,
+                                                            _data_shift == EMPTY ? (_ma_period + 1) : _data_shift)
     {
-        rsi_data = price_mgr.primary_buffer;
+        rsi_data = data_buffers.get(0);
     };
     ~RSIData()
     {
@@ -41,17 +48,33 @@ public:
         rsi_data = NULL;
     };
 
-    string indicatorName() const
+    int classBufferCount() {
+        return 1;
+    }
+
+    double rsiAt(const int idx)
+    {
+        return rsi_data.get(idx);
+    }
+
+    void bindMax(PriceReversal &revinfo, const int begin = 0, const int end = EMPTY, const double limit = RSI_CENTER)
+    {
+        revinfo.bindMax(rsi_data, this, begin, end, limit);
+    }
+
+    void bindMin(PriceReversal &revinfo, const int begin = 0, const int end = EMPTY, const double limit = RSI_CENTER)
+    {
+        revinfo.bindMin(rsi_data, this, begin, end, limit);
+    }
+
+    string indicatorName()
     {
         return StringFormat("%s(%d)", name, ma_period);
     }
 
     void calcMain(const int idx, MqlRates &rates[])
     {
-        // FIXME use EMA of MWMA, to try to smooth out "zero gaps" from p_diff
-        // EMA initial : Just use MWMA
 
-        // addition: Using volume as a weighting factor
         double rs_plus = __dblzero__;
         double rs_minus = __dblzero__;
         double wsum = __dblzero__;
@@ -61,7 +84,9 @@ public:
             const double p_prev = priceFor(n + 1, price_mode, rates);
             const double p_cur = priceFor(n, price_mode, rates);
             const double p_diff = p_cur - p_prev;
-            const double wfactor = weightFor(p_k, ma_period); // * (double) rates[n].tick_volume;
+            // const double wfactor = weightFor(p_k, ma_period) * (double) rates[n].tick_volume;
+            /// weighting on true range
+            const double wfactor = weightFor(n, rates, price_mode, p_k, ma_period);
 
             if (dblZero(p_diff))
             {
@@ -81,8 +106,10 @@ public:
         rs_minus /= weights;
 
         const double rs = (dblZero(rs_minus) ? DBLZERO : (rs_plus / rs_minus));
-        const double rsi_cur = (rs == DBLZERO ? rs : 100.0 - (100.0 / (1.0 + rs)));
+        const double rsi_cur = 100.0 - (100.0 / (1.0 + rs));
+
         const double rsi_pre = rsi_data.getState();
+
         // using EMA of weighted average should ensure this will produce
         // no zero values in the RSI line
         //
@@ -98,25 +125,20 @@ public:
     int calcInitial(const int _extent, MqlRates &rates[])
     {
         // clear any present value and calculate an initial RSI for subsequent EMA
-        rsi_data.setState(EMPTY_VALUE);
+        rsi_data.setState(DBLEMPTY);
         const int calc_idx = _extent - 2 - ma_period;
         calcMain(calc_idx, rates);
         return calc_idx;
     }
 
-    virtual int dataBufferCount()
-    {
-        // return the number of buffers used directly for this indicator.
-        // should be incremented internally, in derived classes
-        return 1;
-    };
-
     virtual int initIndicator(const int start = 0)
     {
-        if (!PriceIndicator::initIndicator()) {
+        if (!PriceIndicator::initIndicator())
+        {
             return -1;
         }
-        if (!initBuffer(start, rsi_data.data, "RSI")) {
+        if (!initBuffer(start, rsi_data.data, "RSI"))
+        {
             return -1;
         }
         return start + 1;
