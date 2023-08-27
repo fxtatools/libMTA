@@ -39,21 +39,28 @@ int OnInit()
 
   /// TEST
   // const int periods[] = {20, 15, 5}; // ctrl
-  const int periods[] = {20, 10, 5}; // new ctrl
+  // const int periods[] = {20, 10, 5}; // new ctrl
   // const int periods[3] = {10, 5, 20}; // test unordered inputs
+  
+  /// Periods and Weights Per the Rate of Change (ROC) analysis method
+  /// developed in Martin Pring's KSTSystem
+  ///
+  /// @par Referernces
+  ///
+  /// Kaufman, P. J. (2013). Multiple Time Frames. In Trading Systems and
+  ///    Methods (5th ed., pp. 801–832). Wiley.
+  const int periods[] = {24, 18, 12, 9};
+  const double weights[] = {4.0, 3.0, 2.0, 1.0};
 
-  const int shifts[] = {5, 3, 3}; // ctrl
-  // const int shifts[] = {3, 3, 5};
-
-  const double weights[] = {0.35, 0.50, 0.15}; // ctrl
+  // const double weights[] = {0.35, 0.50, 0.15}; // ctrl
   // const double weights[] = {0.35, 0.4, 0.25};
 
-  avg_buff = new ADXAvg(ArraySize(periods), periods, shifts, weights, adxavg_price_mode);
+  avg_buff = new ADXAvg(ArraySize(periods), periods, weights, adxavg_price_mode);
   
-  printf("Initialized avg_buff with %d members, total weight %f, first period %d", avg_buff.n_adx_members, avg_buff.total_weights, avg_buff.longest_period);
+  printf("Initialized avg_buff with %d members, total weight %f, first period %d", avg_buff.n_adx_members, avg_buff.total_weights, avg_buff.far_period);
   
   ADXData *iterators[];
-  avg_buff.copyMember(iterators);
+  avg_buff.copyMembers(iterators);
   double out_weights[];
   avg_buff.copyWeights(out_weights);
 
@@ -61,12 +68,12 @@ int OnInit()
     // DEBUG
     const ADXData *iter = iterators[n];
     const double weight = out_weights[n];
-    printf("ADX Iterator [%d] (%d, %d) weight %f", n, iter.ema_period, iter.ema_shift, weight);
+    printf("ADX Iterator [%d] (%d) weight %f", n, iter.ma_period, weight);
   }
 
   printf("Total weights %f", avg_buff.total_weights);
 
-  // IndicatorBuffers(avg_buff.dataBufferCount());
+  // IndicatorBuffers(avg_buff.classBufferCount());
   if (avg_buff.initIndicator() == -1) {
     return INIT_FAILED;
 

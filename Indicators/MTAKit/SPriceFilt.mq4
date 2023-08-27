@@ -1,43 +1,40 @@
 //+------------------------------------------------------------------+
-//|                                                          OCPc.mq4 |
+//|                                                          OCSprice.mq4 |
 //|                                       Copyright 2023, Sean Champ |
 //|                                      https://www.example.com/nop |
 //+------------------------------------------------------------------+
 
 #property strict
 
-#property description "Adaptation of William Blau's True Strength Index"
-
-#property indicator_separate_window
+#property description "Smoothed Price, a filter-based application of John F. Ehlers' Super Smoother"
 
 #property indicator_buffers 1
-#property indicator_color1 clrDodgerBlue
+#property indicator_color1 clrLime
 #property indicator_width1 1
 #property indicator_style1 STYLE_SOLID
 
-#property indicator_level1 0.0
-#property indicator_level2 - 15.0
-#property indicator_level3 15.0
-#property indicator_levelcolor clrDimGray
-#property indicator_levelstyle 2
+#property indicator_chart_window
 
+extern int sprice_period = 14;                         // Period for Smoothing
+extern ENUM_APPLIED_PRICE sprice_mode = PRICE_TYPICAL; // Applied Price
 
-extern int tsi_r = 10;                                    // First Smoothing Period
-extern int tsi_s = 6;                                     // Second Smoothing Period
-extern ENUM_APPLIED_PRICE tsi_price_mode = PRICE_TYPICAL; // Applied Price
+#ifndef __MQLBUILD__
+#include <MQLsyntax.mqh>
+#endif
 
-#include <../Libraries/libMTA/libTSI.mq4>
+#include <../Libraries/libMTA/libSPriceFilt.mq4>
 
-
-TSIData *tsi_data;
+SPFData *sprice_data;
+ 
 
 int OnInit()
 {
-    tsi_data = new TSIData(tsi_r, tsi_s, tsi_price_mode, _Symbol, _Period);
-    if (tsi_data.initIndicator() == -1)
+    sprice_data = new SPFData(sprice_period, sprice_mode, _Symbol, _Period);
+
+    if (sprice_data.initIndicator() == -1)
     {
         return INIT_FAILED;
-    };
+    }
     return INIT_SUCCEEDED;
 }
 
@@ -53,10 +50,10 @@ int OnCalculate(const int rates_total,
                 const int &spread[])
 {
 
-    return tsi_data.calculate(rates_total, prev_calculated);
+    return sprice_data.calculate(rates_total, prev_calculated);
 }
 
 void OnDeinit(const int dicode)
 {
-    FREEPTR(tsi_data);
+    FREEPTR(sprice_data);
 }

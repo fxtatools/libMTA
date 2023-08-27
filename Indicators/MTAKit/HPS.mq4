@@ -1,42 +1,41 @@
 //+------------------------------------------------------------------+
-//|                                                          Ult.mq4 |
+//|                                                          OCSprice.mq4 |
 //|                                       Copyright 2023, Sean Champ |
 //|                                      https://www.example.com/nop |
 //+------------------------------------------------------------------+
 
 #property strict
 
-#property description "An adaptation of Larry Williams' Ultimate Oscillator"
+#property description "Smoothed Price, a filter-based application of John F. Ehlers' Super Smoother"
 
 #property indicator_buffers 1
-#property indicator_color1 clrGoldenrod
+#property indicator_color1 clrLime
 #property indicator_width1 1
 #property indicator_style1 STYLE_SOLID
 
-// #property indicator_color2 clrGray
-// #property indicator_width2 1
-// #property indicator_style2 STYLE_DOT
-
-
+// #property indicator_chart_window
 #property indicator_separate_window
 
-#property indicator_level1     50.0
-#property indicator_levelcolor clrDarkSlateGray
+extern int sprice_period = 14;                         // Period for Smoothing
+extern ENUM_APPLIED_PRICE sprice_mode = PRICE_TYPICAL; // Applied Price
 
-extern const int ult_period = 32;                             // Main Period, favoring multiples of 2
-extern const ENUM_APPLIED_PRICE ult_price_mode = PRICE_CLOSE; // Applied Price
+#ifndef __MQLBUILD__
+#include <MQLsyntax.mqh>
+#endif
 
-#include <../Libraries/libMTA/libUlt.mq4>
+#include <../Libraries/libMTA/libHPS.mq4>
 
-UltData *ult;
+HPSData *hps_data;
+ 
 
 int OnInit()
-   {
-    ult = new UltData(ult_period, ult_price_mode, _Symbol, _Period);
+{
+    hps_data = new HPSData(sprice_period, sprice_mode, _Symbol, _Period);
 
-    //// FIXME update API : initIndicator => bool
-    // return ult.initIndicator();
-    ult.initIndicator();
+    if (hps_data.initIndicator() == -1)
+    {
+        return INIT_FAILED;
+    }
     return INIT_SUCCEEDED;
 }
 
@@ -51,10 +50,11 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-    return ult.calculate(rates_total, prev_calculated);
+
+    return hps_data.calculate(rates_total, prev_calculated);
 }
 
 void OnDeinit(const int dicode)
 {
-    FREEPTR(ult);
+    FREEPTR(hps_data);
 }

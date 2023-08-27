@@ -24,20 +24,23 @@
 #property indicator_width2 1
 #property indicator_style2 STYLE_SOLID
 // SMA of rate at crossover
-#property indicator_color3 clrGold
+// #property indicator_color3 clrGold
+#property indicator_color3 clrNONE
 #property indicator_width3 1
 #property indicator_style3 STYLE_DOT
 
-// #property indicator_level1 0.0
+#property indicator_level1 0.0
 // #property indicator_level2 - 50.0
 // #property indicator_level3 50.0
+#property indicator_level2 - 30.0
+#property indicator_level3 30.0
+
 #property indicator_levelcolor clrDimGray
 #property indicator_levelstyle 2
 
-extern const int rvi_fill_period = 10; // Main period
-extern const int rvi_signal_period = 5; // Signal Period
+extern const int rvi_fill_period = 10;                          // Main period
+extern const int rvi_signal_period = 5;                         // Signal Period
 extern const ENUM_APPLIED_PRICE rvi_price_mode = PRICE_TYPICAL; // Applied Price
-
 
 #include <../Libraries/libMTA/libRVI.mq4>
 
@@ -45,8 +48,9 @@ RVIData *rvi_in;
 
 int OnInit()
 {
-    rvi_in = new RVIData(rvi_fill_period, rvi_signal_period, rvi_price_mode,  _Symbol, _Period);
-    if (rvi_in.initIndicator() == -1) {
+    rvi_in = new RVIData(rvi_fill_period, rvi_signal_period, rvi_price_mode, _Symbol, _Period);
+    if (rvi_in.initIndicator() == -1)
+    {
         return INIT_FAILED;
     }
     return INIT_SUCCEEDED;
@@ -63,7 +67,7 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-   return rvi_in.calculate(rates_total, prev_calculated);
+    return rvi_in.calculate(rates_total, prev_calculated);
 }
 
 void OnDeinit(const int dicode)

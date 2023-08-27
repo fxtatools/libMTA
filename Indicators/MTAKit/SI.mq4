@@ -35,8 +35,8 @@ extern bool si_in_weight_volume = false; // Weight the SI MA for volume?
 ///
 /// @par Adaptations
 ///
-///  This indicator provides an option for applying tick volume as 
-///  a coefficient in the weighting factor for the moving average 
+///  This indicator provides an option for applying tick volume as
+///  a coefficient in the weighting factor for the moving average
 ///  of SI. For this indicator, the option for volume weighting will
 ///  produce a substantially different indicator line. The option for
 ///  volume weighting is false, by default.
@@ -52,7 +52,7 @@ extern bool si_in_weight_volume = false; // Weight the SI MA for volume?
 class SIData : public PriceIndicator
 {
 protected:
-    PriceBuffer *si_data;
+    ValueBuffer<double> *si_data;
 
 public:
     const int si_offset;
@@ -64,14 +64,18 @@ public:
            const bool weight_volume = false,
            const string _symbol = NULL,
            const int _timeframe = NULL,
+           const bool _managed = true,
            const string _name = "SI",
            const int _nr_buffers = 1,
            const int _data_shift = EMPTY) : si_offset(offset),
                                             si_period(period),
                                             si_weight_volume(weight_volume),
-                                            PriceIndicator(_name, _nr_buffers, _symbol, _timeframe, _data_shift == EMPTY ? (period + 1) : data_shift)
+                                            PriceIndicator(_managed, _name,
+                                                           _nr_buffers,
+                                                           _symbol, _timeframe,
+                                                           _data_shift == EMPTY ? (period + 1) : data_shift)
     {
-        si_data = price_mgr.primary_buffer;
+        si_data = data_buffers.get(0);
     };
     ~SIData()
     {
@@ -80,7 +84,7 @@ public:
 
     string indicatorName()
     {
-        return StringFormat("%s(%d, %d)", name, si_offset, si_period);
+        return StringFormat("%s(%d)", name, si_period);
     }
 
     void calcMain(const int idx, MqlRates &rates[])
@@ -94,13 +98,14 @@ public:
         const double cur_close = cur.close;
         const double cur_high = cur.high;
         const double cur_low = cur.low;
-        const double trange = MathMax(cur_high, pre_close) - MathMin(cur_low, pre_close);
+        const double trange = trueRange(pre, cur, PRICE_TYPICAL);
 
-        const double si_k = MathMax(cur_high - pre_close, cur_low - pre_close);
+        const double si_k = fmax(cur_high - pre_close, cur_low - pre_close);
         // const double si_m = points_ratio; // TBD - adaptation for FX markets
-        const double si_m = 100; // a conventional M for the calclation, in reference
+        // const double si_m = 100; // a conventional M for the calclation, in reference
+        const double si_m = 1.0/points_ratio;
 
-        const double si = dblZero(trange) ? DBLZERO : pricePoints(5000 * (((cur_close - pre.close) + (0.5 * (cur_close - cur.open)) + (0.25 * (pre_close - pre.open))) / trange) * (si_k / si_m));
+        const double si = dblZero(trange) ? DBLZERO : pricePoints(si_m * (((cur_close - pre.close) + (0.5 * (cur_close - cur.open)) + (0.25 * (pre_close - pre.open))) / trange) * (si_k / si_m));
 
         // EMA smoothing for the indicator
         const double pre_si = si_data.getState();
@@ -111,7 +116,7 @@ public:
         else
         {
             double si_ma = si;
-            double si_weights = si_in_weight_volume ? (double) cur.tick_volume : 1.0;
+            double si_weights = si_in_weight_volume ? (double)cur.tick_volume : 1.0;
             for (int n = idx + si_period - 1, p_k = 1; n > idx; n--, p_k++)
             {
                 // volume weighting will produce a substantially different indicator graph, here
@@ -119,7 +124,7 @@ public:
                 if (n_si == EMPTY_VALUE)
                     continue;
                 const double rweight = weightFor(p_k, si_period);
-                const double wfactor = si_in_weight_volume ? rweight * (double) rates[n].tick_volume : rweight;
+                const double wfactor = si_in_weight_volume ? rweight * (double)rates[n].tick_volume : rweight;
                 si_ma += (n_si * wfactor);
                 si_weights += wfactor;
             }
@@ -127,7 +132,7 @@ public:
 
             const double si_ema = ema(pre_si, si_ma, si_period);
             si_data.setState(si_ema);
-            //si_data.setState(si_ma);
+            // si_data.setState(si_ma);
         }
     }
 
@@ -140,10 +145,12 @@ public:
 
     virtual int initIndicator(const int start = 0)
     {
-        if (!PriceIndicator::initIndicator()) {
+        if (!PriceIndicator::initIndicator())
+        {
             return -1;
         }
-        if (!initBuffer(start, si_data.data, "SI")) {
+        if (!initBuffer(start, si_data.data, "SI"))
+        {
             return -1;
         }
         return start + 1;

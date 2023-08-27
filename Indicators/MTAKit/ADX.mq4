@@ -15,7 +15,7 @@
 #property indicator_width1 1
 #property indicator_style1 STYLE_SOLID
 
-#property indicator_color2 clrOrange
+#property indicator_color2 clrDarkGoldenrod
 #property indicator_width2 1
 #property indicator_style2 STYLE_SOLID
 
@@ -30,14 +30,18 @@
 // #property indicator_color5 clrLimeGreen
 // #property indicator_width5 1
 // #property indicator_style5 STYLE_DOT
+/// or ... histogram for adjusted inter-crossover rate
+/// or ... not.
+// #property indicator_color5 clrGray
+// #property indicator_width5 2
+// #property indicator_style5 STYLE_SOLID
 
 
 #property indicator_level1     20.0
 #property indicator_levelcolor clrDarkSlateGray
 
-extern const int iadx_period = 10;                               // EMA Period
-extern const int iadx_period_shift = 3;                          // Forward Shift for EMA Period
-extern const ENUM_APPLIED_PRICE iadx_price_mode = PRICE_TYPICAL; // ATR Applied Price
+extern const int iadx_period = 10;                               // Analysis Period
+extern const ENUM_APPLIED_PRICE iadx_price_mode = PRICE_TYPICAL; // Applied Price
 
 #include <../Libraries/libMTA/libADX.mq4>
 
@@ -45,7 +49,7 @@ ADXData *adx_data;
 
 int OnInit()
 {
-  adx_data = new ADXData(iadx_period, iadx_period_shift, iadx_price_mode, _Symbol, _Period);
+  adx_data = new ADXData(iadx_period, iadx_price_mode, _Symbol, _Period);
   if (adx_data.initIndicator() == -1) {
     return INIT_FAILED;
   }

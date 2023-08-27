@@ -5,386 +5,337 @@
 #property library
 #property strict
 
-#ifndef QUOTE_PADDING
-#define QUOTE_PADDING 512
-#endif
+#include "libMql4.mq4"
+#include <stdlib.mqh>
 
-#ifndef DELPTR
-#define DELPTR(_PTR_)                           \
-    if (CheckPointer(_PTR_) == POINTER_DYNAMIC) \
-    {                                           \
-        delete _PTR_;                           \
-    }
-#endif
-
-#ifndef FREEPTR
-#define FREEPTR(_PTR_) \
-    if (_PTR_ != NULL) \
-    {                  \
-        DELPTR(_PTR_); \
-        _PTR_ = NULL;  \
-    }
-#endif
-
-template <typename T>
-class DataBuffer
+/// @brief Abstract base class for indexed structures
+class Indexed
 {
 protected:
-    virtual int extent_scale_padding(const int ext_diff, const int padding = QUOTE_PADDING)
-    {
-        return (((int)ceil(ext_diff / padding) + 1) * padding);
-    }
+    const bool managed_p;
+    // const string label; /// for purpose of hash table storage & iteration, e.g for filter buffers
 
-    T initial_state; // intermediate state storage for implementations.
-    // ^ MQL compiler fails to compile any pointer declaration `T *initial_state` here
 
 public:
-    int expand_extent;
+    Indexed(const bool managed = true) : managed_p(managed)
+    {
+        /// One might not be able to call a virtual function within
+        /// the ctor of the declaring class, in MQL4.
+        ///
+        // setExtent(_extent);
+    }
+
+    virtual bool setExtent(int len) = 0;
+    virtual bool shiftExtent(int count) = 0;
+    virtual int getExtent() = 0;
+
+    virtual bool getManagedP()
+    {
+        return managed_p;
+    }
+
+};
+
+/// @brief Base class for buffer implementations
+/// @tparam T buffer value type
+///
+/// @par Implementation Notes
+///
+/// This API has not been tested for non-time-series data access
+///
+template <typename T>
+class SeriesBuffer : public Indexed
+{
+protected:
+    /// intermediate state storage for implementations.
+    T state_cur;
+    /// array-as-series flag
+    const bool series_p;
+    /// local caching for the data extent (may be removed)
     int extent;
+
+
+public:
     T data[];
 
-    DataBuffer(const int _extent = 0, const bool as_series = true)
+    SeriesBuffer(const int _extent = 0,
+                 const bool as_series = true,
+                 const bool managed = true) : Indexed(managed),
+                                              extent(0),
+                                              series_p(as_series)
     {
-        expand_extent = 0;
-        setExtent(_extent);
-        setAsSeries(as_series);
+        ArraySetAsSeries(data, as_series);
     };
-    ~DataBuffer()
+    ~SeriesBuffer()
     {
         ArrayFree(data);
     };
 
-    /// @brief increase the length of this and all linked data buffers
-    /// @param len new length for linked data buffers
-    /// @param value for padding. If a literal value, the value will be used as additional
-    ///   buffer padding. if EMPTY, padding will be added under a factor of QUOTE_PADDING.
-    ///   This value may be provided as 0, to indicate no padding.
-    /// @return true if the data array for this and all linked buffers was resized, else false
-    virtual bool setExtent(int len, const int padding = EMPTY)
+    bool getAsSeries() {
+        return series_p;
+    }
+
+    bool getAsSeries() const {
+        return series_p;
+    }
+
+    /// @brief set the length of this buffer's data array
+    /// @param len new length for the data array
+    /// @return true if the data was resized, else false
+    bool setExtent(int len)
     {
         if (len == extent)
         {
             return true;
         }
-        else if (len >= expand_extent)
+        else if (managed_p)
         {
-            const int new_ext = (padding == EMPTY ? (expand_extent + extent_scale_padding(len - expand_extent)) : (len + padding));
-            // DEBUG
-            if (new_ext < len)
-                printf("Data Buffer: %d => New extent %d is less than requested length %d (%d %f)", expand_extent, new_ext, len, extent_scale_padding(len - expand_extent), ceil((len - expand_extent) / QUOTE_PADDING));
-            const int rslt = ArrayResize(data, new_ext);
-            if (rslt == -1)
-            {
-                extent = -1;
-                return false;
-            }
-            expand_extent = new_ext;
+            extent = len;
+            return true;
         }
-        extent = len;
-        return true;
-    };
-
-    /// @brief reduce the length of this and all linked data buffers
-    /// @param len new length for linked data buffers
-    /// @param value for padding. If a literal value, the value will be used as additional
-    ///   buffer padding. if EMPTY, padding will be added under a factor of QUOTE_PADDING.
-    ///   This value may be provided as 0, to indicate no padding.
-    /// @return true if the data array for this and all linked buffers was resized, else false
-    virtual bool reduceExtent(int len, const int padding = EMPTY)
-    {
-        const int reduced = (padding == EMPTY ? extent_scale_padding(len) : (len + padding));
-        const int rslt = ArrayResize(data, reduced);
+        const int rslt = ArrayResize(data, len);
         if (rslt == -1)
         {
             extent = -1;
             return false;
         }
-        else
+        extent = len;
+        return true;
+    };
+
+    /// @brief resize the buffer's data array to extent + count, shifting all
+    ///  array data points by the value of the count.
+    /// @param count number of data points for the shift. A negative value will in effect
+    ///  trim that many of the most recent elements the data array. To shrink the data
+    //   array while trimming the least recent elements, refer to setExtent()
+    /// @return true if the buffer extent was successfully changed,, else false.
+    bool shiftExtent(int count)
+    {
+        if (count == 0 || managed_p)
         {
-            extent = len;
-            expand_extent = reduced;
             return true;
         }
-    };
 
-    /// @brief configure the and all linked data buffers to be accessed as/not as
-    //  MetaTrader time-series data
-    /// @param as_series boolean flag for MT4 ArraySetAsSeries()
-    /// @return true if this and all linked buffers were set as series, else false.
-    bool setAsSeries(const bool as_series = true)
+        ArraySetAsSeries(data, !series_p);
+        const bool rslt = setExtent(extent + count);
+        ArraySetAsSeries(data, series_p);
+        return rslt;
+    }
+
+    bool shiftExtent() {
+        return shiftExtent(1);
+    }
+
+    int getExtent()
     {
-        return ArraySetAsSeries(data, as_series);
-    };
-};
-
-template <typename T>
-class ValueBuffer : public DataBuffer<T>
-{
-
-public:
-    ValueBuffer(const int _extent = 0, const bool as_series = true) : DataBuffer(_extent, as_series){};
+        return ArraySize(data);
+    }
 
     T get(const int idx)
     {
-        // unchecked call - this assumes that a value has been initialized
-        // at idx and that the buffer's extent is > idx
+        if (((debug_flags & DEBUG_PROGRAM) != 0) && (idx > getExtent()))
+        {
+            printf(__FUNCSIG__ + ": Buffer access for %d is further than extent %d", idx, getExtent());
+        }
         return data[idx];
     };
 
     T getState()
     {
-        return initial_state;
+        return state_cur;
     }
 
-    void set(const int idx, const T datum)
+
+
+    
+    virtual void restoreFrom(const int idx)
     {
-        // unchecked call - this assumes that the buffer's extent is > idx
-        data[idx] = datum;
+        state_cur = data[idx];
+    }
+
+
+    /// @brief store a referenced value or an object at a provided index in the
+    ///  internal data buffer. This method will not change the current internal state
+    /// @param idx the index for storage
+    /// @param datum a reference to the value or object to store
+    void storeState(const int idx, const T &datum)
+    {
+        if (((debug_flags & DEBUG_PROGRAM) != 0) && (idx > getExtent()))
+        {
+            printf(__FUNCSIG__ + ": Buffer access for %d is further than extent %d", idx, getExtent());
+        }
+        const T _cur = datum;
+        data[idx] = _cur;
     };
 
-    void set(const int idx) {
-        // DEBUG(__FUNCSIG__ + "set(%d) extent %d len %d", idx, extent, ArraySize(data));
+    /// @brief store the current internal state at a provided index in the internal data buffer
+    /// @param idx the index for storage
+    void storeState(const int idx)
+    {
+        if (((debug_flags & DEBUG_PROGRAM) != 0) && (idx > getExtent()))
+        {
+            printf(__FUNCSIG__ + ": Buffer access for %d is further than extent %d", idx, getExtent());
+        }
         data[idx] = getState();
     }
 
-    void setState(const T datum)
+
+    /// @brief set the buffer's current internal state
+    /// @param datum a reference to the value or object for the new state
+    void setState(const T &datum)
     {
-        initial_state = datum;
+        const T _cur = datum;
+        state_cur = _cur;
     };
+
+
 };
 
 template <typename T>
-class LinkedBuffer : public ValueBuffer<T>
+class ValueBuffer : public SeriesBuffer<T>
+{
+public:
+    ValueBuffer(const int _extent = 0, const bool as_series = true, const bool managed = true) : SeriesBuffer(_extent, as_series, managed){};
+};
+
+template <typename T>
+class ObjectBuffer : public SeriesBuffer<T>
+{
+
+public:
+    ObjectBuffer(const int _extent = 0, const bool as_series = true) : SeriesBuffer(_extent, as_series){};
+
+};
+
+/// Buffer Lists
+
+#include <dlib/Collection/LinkedList.mqh>
+#include <dlib/Collection/Collection.mqh>
+
+template <typename T>
+class BufferMgr : public LinkedList<T>
 {
 protected:
-
-public:
-    // pointer for the next linked buffer. This value is wholly untyped, 
-    // to allow for linking with other linked indicator buffers, regardless
-    // of th e data type for values stored in each.
-    void *next_buffer;
-
-
-    LinkedBuffer() : next_buffer(NULL){};
-
-    LinkedBuffer(const int _extent = 0, const bool as_series = true) :  next_buffer(NULL), ValueBuffer<T>(_extent, as_series){};
-
-    ~LinkedBuffer()
-    {
-        FREEPTR(next_buffer);
-    };
-
-    /// @brief retrieve the next buffer to this LinkedBuffer
-    /// @return the next LinkedBuffer, or NULL if this linked buffer has not
-    ///   been defined with a next buffer
-    template <typename Tv>
-    Tv *next()
-    {
-        // return next_buffer;
-        // return dynamic_cast<LinkedBuffer<Tv>*>(next_buffer);
-        return dynamic_cast<Tv*>(next_buffer);
-    };
-
-    /// @brief return the nth linked member of this LinkedBuffer series
-    /// @param n relative index of the linked member
-    /// @return this rate buffer when `n == 0`,
-    //    else NULL when there is no next buffer,
-    //    else the {n-1}th next buffer
-    template <typename Tv>
-    Tv *nth(const int n)
-    {
-        if (n == 0)
-        {
-            return &this;
-        }
-        else if (next_buffer == NULL)
-        {
-            return NULL;
-        }
-        else
-        {
-            // return dynamic_cast<LinkedBuffer<Tv>*>(next_buffer.nth(n - 1));
-            return dynamic_cast<Tv*>(next_buffer.nth(n - 1));
-        }
-    };
-
-    /// @brief return the last linked LinkedBuffer of this series
-    /// @return this buffer, if the next buffer is NULL, else
-    //    the last of the next buffer
-    template <typename Tv>
-    Tv *last(const int n)
-    {
-        if (next_buffer == NULL)
-        {
-            return &this;
-        }
-        else
-        {
-            // return dynamic_cast<LinkedBuffer<Tv>*>(next_buffer.last());
-            return dynamic_cast<Tv*>(next_buffer.last());
-        }
-    };
-
-    /// @brief set a LinkedBuffer as this buffer's next buffer
-    /// @param next LinkedBuffer to set as this buffer's next buffer
-    /// @return NULL if no rate buffer was previously defined as the next buffer,
-    //   else the previously defined next buffer
-    void setNext(void *next)
-    {
-        next_buffer = next;
-    };
-
-    /// @brief increase the length of this and all linked data buffers
-    /// @param len new length for linked data buffers
-    /// @param value for padding. If a literal value, the value will be used as additional
-    ///   buffer padding. if EMPTY, padding will be added under a factor of QUOTE_PADDING.
-    ///   This value may be provided as 0, to indicate no padding.
-    /// @return true if the data array for this and all linked buffers was resized, else false
-    virtual bool setExtent(int len, const int padding = EMPTY)
-    {
-        const bool rslt = DataBuffer<T>::setExtent(len, padding);
-        if (rslt && (next_buffer != NULL))
-            return (dynamic_cast<DataBuffer<T>*>(next_buffer)).setExtent(len, padding);
-        else
-            return rslt;
-    };
-    
-
-    /// @brief reduce the length of this and all linked data buffers
-    /// @param len new length for linked data buffers
-    /// @param value for padding. If a literal value, the value will be used as additional
-    ///   buffer padding. if EMPTY, padding will be added under a factor of QUOTE_PADDING.
-    ///   This value may be provided as 0, to indicate no padding.
-    /// @return true if the data array for this and all linked buffers was resized, else false
-    virtual bool reduceExtent(int len, const int padding = EMPTY)
-    {
-        const bool rslt = DataBuffer<T>::reduceExtent(len, padding);
-        if (rslt && (next_buffer != NULL))
-            return (dynamic_cast<DataBuffer<T>*>(next_buffer)).reduceExtent(len, padding);
-        else
-            return rslt;
-    };
-
-    /// @brief configure the and all linked data buffers to be accessed as/not as
-    //  MetaTrader time-series data
-    /// @param as_series boolean flag for MT4 ArraySetAsSeries()
-    /// @return true if this and all linked buffers were set as series, else false.
-    virtual bool setAsSeries(const bool as_series = true)
-    {
-        const bool rslt = DataBuffer<T>::setAsSeries(as_series);
-        if (rslt && (next_buffer != NULL))
-            return (dynamic_cast<DataBuffer<T>*>(next_buffer)).setAsSeries(as_series);
-        else
-            return rslt;
-    };
-    
-};
-
-template <typename T>
-class BufferMgr
-{
-public:
-    // T *primary_buffer;
-    void *primary_buffer; // untyped here, to work around some compiler features
     int extent;
+    const bool series_p;
+    const bool managed_p;
 
-    BufferMgr()
+public:
+    BufferMgr(const bool as_series = true,
+              const bool managed = true) : series_p(as_series),
+                                           managed_p(managed)
     {
-        primary_buffer = NULL;
-        extent = EMPTY;
-    };
-    ~BufferMgr()
-    {
-        FREEPTR(primary_buffer);
-    };
-
-    BufferMgr(const int _extent, const bool as_series = true) : extent(_extent)
-    {
-        primary_buffer = new T(_extent, as_series);
-    };
-
-    template <typename Tv>
-    Tv* primaryBuffer() {
-        // an ostensibly low-level feature of this data buffer API,
-        // this method may generally require casting at the call site
-        return dynamic_cast<Tv*>(primary_buffer);
     }
 
-    virtual bool setExtent(const int _extent, const int padding = EMPTY)
-    {
-        if (_extent == extent)
-            return true;
-        const bool rslt = dynamic_cast<T*>(primary_buffer).setExtent(_extent, padding);
-        if (rslt)
-        {
-            extent = _extent;
-            return true;
-        }
-        return false;
-    };
+    /// LinkedList<T> provides a dtor via LinkedListBase<T>
 
-    virtual bool reduceExtent(const int _extent, const int padding = EMPTY)
+    int getExtent()
     {
-        if (_extent == extent)
-            return true;
-        const bool rslt = dynamic_cast<T*>(primary_buffer).reduceExtent(_extent, padding);
-        if (rslt)
+        return extent;
+    }
+
+    bool setExtent(const int ext)
+    {
+
+        if (ext != extent)
         {
-            extent = _extent;
-            return true;
+            /// manual iterator, to set extent on all linked buffers
+            int n = 0;
+            T buf = get(n++);
+            ResetLastError();
+            while (buf != NULL)
+            {
+                if (!buf.setExtent(ext))
+                {
+                    const int errno = GetLastError();
+                    printf(__FUNCSIG__ + "Failed to set extent %d for buffer %d", errno, ext, n);
+                    printf("[%d] %s", errno, ErrorDescription(errno));
+                    return false;
+                }
+                buf = get(n++);
+            }
+            extent = ext;
         }
-        return false;
-    };
+        return true;
+    }
+
+    /// shift extent for every buffer, if not managed
+    bool shiftExtent(const int count)
+    {
+
+        int n = 0;
+        T buf = get(n++);
+        int newext = extent;
+        while (buf != NULL)
+        {
+            if (!buf.shiftExtent(count))
+            {
+                printf(__FUNCSIG__ + ": Failed to shift extent %d for buffer %d", count, n);
+                return false;
+            }
+            newext = buf.getExtent();
+            buf = get(n++);
+        }
+        // using the new extent from the last buffer
+        // as the new extent for the buffer
+        extent = newext;
+        return true;
+    }
+
+    bool addBuffer(T &buf)
+    {
+        push(buf);
+        if (!managed_p && !buf.setExtent(extent))
+        {
+            printf(__FUNCSIG__ + ": Failed to set extent %d when adding buffer", extent);
+            return false;
+        }
+        else if (managed_p != buf.getManagedP())
+        {
+            printf(__FUNCSIG__ + ": Failed to add %s buffer to %s buffer manager", (managed_p ? "unmanaged" : "managed"), (managed_p ? "managed" : "unmanaged"));
+            return false;
+        }
+
+        return true;
+    }
 };
 
-/// @brief Template class for Buffer Manager implementations
-/// @tparam T DataBuffer implementation class for this Buffer Manager
 template <typename T>
-class LinkedBufferMgr : public BufferMgr<T>
+class ValueBufferList : public BufferMgr<ValueBuffer<T> *>
 {
 public:
-    LinkedBufferMgr(const int _extent = 0, const bool as_series = true, const int n_linked = 0)
+    ValueBufferList(const bool as_series = true,
+                    const int nr_buff = 0,
+                    bool managed = true) : BufferMgr<ValueBuffer<T> *>(as_series, managed)
     {
-        extent = _extent;
-        primary_buffer = new T(_extent, as_series, n_linked);
-    };
-
-   /*
-    T *nth_buffer(const int n)
-    {
-        return primary_buffer.nth(n);
-    };
-
-    T *last_buffer()
-    {
-        return primary_buffer.last();
-    };
-    */
-};
-
-class PriceBuffer : public LinkedBuffer<double>
-{
-public:
-    PriceBuffer(const int _extent = 0, const bool as_series = true, const int n_more = 0) : LinkedBuffer<double>(_extent, as_series)
-    {
-        if (n_more == 0)
+        // printf("Initializing %d value buffers", nr_buff); // DEBUG
+        for (int count = 0; count < nr_buff; count++)
         {
-           // this.setNext(NULL);
-            // this.clearNext();
-            next_buffer = NULL;
-        }
-        else
-        {
-            this.setNext(new PriceBuffer(_extent, as_series, n_more - 1));
+            // printf("Intiializing value buffer %d", count);
+            ValueBuffer<T> *buf = new ValueBuffer<T>(0, as_series, managed_p);
+            push(buf);
         }
     };
 
+    ValueBuffer<T> *first()
+    {
+        /// may return null
+        return get(0);
+    }
+
+    ValueBuffer<T> *nth(const int n)
+    {
+        /// may return null
+        return get(n);
+    }
 };
 
-class PriceMgr : public LinkedBufferMgr<PriceBuffer>
+class DataBufferList : public ValueBufferList<double>
 {
 public:
-    PriceMgr(const int _extent = 0, const bool as_series = true, const int n_linked = 0) : LinkedBufferMgr<PriceBuffer>(_extent, as_series, n_linked){};
+    DataBufferList(const bool as_series = true,
+                   const int nr_buff = 0,
+                   const bool managed = true) : ValueBufferList(as_series, nr_buff, managed){};
 };
 
 #endif

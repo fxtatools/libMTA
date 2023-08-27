@@ -26,10 +26,10 @@
 #property indicator_level2     42.0
 #property indicator_levelstyle 2
 
-#include <../Libraries/libMTA/libRSI.mq4>
-
 extern const int rsi_period = 10;                                 // RSI MA Period
-extern const ENUM_PRICE_MODE rsi_price_mode = PRICE_MODE_TYPICAL; // Applied Price
+extern const ENUM_APPLIED_PRICE rsi_price_mode = PRICE_TYPICAL; // Applied Price
+
+#include <../Libraries/libMTA/libRSI.mq4>
 
 RSIData *rsi_data;
 

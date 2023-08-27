@@ -36,6 +36,12 @@
 
 #include <stdio.h>
 
+// ** TBD
+
+#ifndef interface
+#define interface class
+#endif
+
 /**
  * MQL4 Pointers
  **/
@@ -47,19 +53,21 @@ enum ENUM_POINTER_TYPE
     POINTER_AUTOMATIC
 };
 
-ENUM_POINTER_TYPE CheckPointer(void *ptr){};
+ENUM_POINTER_TYPE CheckPointer(void *ptr);
+
+template <typename T>
+T GetPointer(T ptr);
 
 /**
  * String Functions (FIXME C++ toolchain interation for editor tools)
  **/
 
-//// Preprocessor hacks for C++ Compatibility
+/// defining a few hacks for C++ Compatibility
+/// within the editor environment
 
-// #define StringFormat(s, ...) std::format(s, __VA_ARGS__)
-#define StringFormat(s, ...) s
+string StringFormat(const string s, ...);
 
-// #define Print(...) std::cout << __VA_ARGS__
-#define Print(...) __VA_ARGS__
+#define Print(...) puts(__VA_ARGS__)
 
 #define PrintFormat(s, ...) printf(s, __VA_ARGS__)
 
@@ -516,15 +524,33 @@ enum _ORDER_TYPE OrderType();
  **/
 
 double fmod(double dividend, double divisor);
+double MathMod(double dividend, double divisor);
 double fabs(double value);
+double MathAbs(double value);
 double ceil(double value);
+double MathCeil(double value);
 double floor(double value);
+double MathFloor(double value);
 double pow(double base, double exp);
 double sqrt(double value);
+double MathSqrt(double value);
 double log(double value);
+double MathLog(double value);
 double log10(double value);
-double fmin(double a, double b);
-double fmax(double a, double b);
+double MathLog10(double value);
+double fmin(double lhs, double rhs);
+double MathMin(double lhs, double rhs);
+double fmax(double lhs, double rhs);
+double MathMax(double lhs, double rhs);
+
+double cos(double radians);
+double MathCos(double radians);
+double sin(double radians);
+double MathSin(double radians);
+double tan(double radians);
+double MathTan(double radians);
+
+
 
 /**
  * Indicators
@@ -603,12 +629,20 @@ enum ENUM_INIT_RETCODE
 // #define INIT_SUCCEEDED 0
 // #define INIT_AGENT_NOT_SUITABLE 0
 // #define INIT_PARAMETERS_INCORRECT 0
-#define __DATE__ 0
-#define __DATETIME__ 0
-#define __FILE__ 0
-#define __FUNCSIG__ 0
-#define __FUNCTION__ 0
-#define __LINE__ 0
+
+/// Editors such as VS Code, with its C++ support, may
+/// typically expand these to their correct value without
+/// declaration. 
+///
+/// In C/C++ environments, the compiler would typically
+/// provide these macros.
+// #define __DATE__ 0
+// #define __DATETIME__ 0
+// #define __FILE__ 0
+// #define __FUNCSIG__ 0
+// #define __FUNCTION__ 0
+// #define __LINE__ 0
+
 #define __MQLBUILD__ 0
 #define __MQL5BUILD__ 0
 #define __PATH__ 0
@@ -1946,7 +1980,7 @@ enum ENUM_INIT_RETCODE
 #define CopyTicks() 0
 // #define CopyTickVolume() 0
 // #define CopyTime() 0
-#define cos() 0
+// #define cos() 0
 #define CryptDecode() 0
 #define CryptEncode() 0
 #define DebugBreak() 0
@@ -2007,7 +2041,7 @@ enum ENUM_INIT_RETCODE
 #define FrameInputs() 0
 #define FrameNext() 0
 #define GetLastError() 0
-#define GetPointer() 0
+// #define GetPointer() 0
 #define GetTickCount() 0
 #define GlobalVariableCheck() 0
 #define GlobalVariableDel() 0
@@ -2090,23 +2124,23 @@ enum ENUM_INIT_RETCODE
 #define MathArccos() 0
 #define MathArcsin() 0
 #define MathArctan() 0
-#define MathCeil() 0
-#define MathCos() 0
-#define MathExp() 0
-#define MathFloor() 0
+// #define MathCeil() 0
+// #define MathCos() 0
+// #define MathExp() 0
+// #define MathFloor() 0
 #define MathIsValidNumber() 0
-#define MathLog() 0
-#define MathLog10() 0
-#define MathMax() 0
-#define MathMin() 0
-#define MathMod() 0
-#define MathPow() 0
+// #define MathLog() 0
+// #define MathLog10() 0
+// #define MathMax() 0
+// #define MathMin() 0
+// #define MathMod() 0
+// #define MathPow() 0
 #define MathRand() 0
 #define MathRound() 0
-#define MathSin() 0
-#define MathSqrt() 0
+// #define MathSin() 0
+// #define MathSqrt() 0
 #define MathSrand() 0
-#define MathTan() 0
+// #define MathTan() 0
 #define MessageBox() 0
 #define MQLInfoInteger() 0
 #define MQLInfoString() 0
@@ -2185,7 +2219,7 @@ enum ENUM_INIT_RETCODE
 #define SignalInfoSetInteger() 0
 #define SignalSubscribe() 0
 #define SignalUnsubscribe() 0
-#define sin() 0
+// #define sin() 0
 #define Sleep() 0
 // #define sqrt() 0
 #define srand() 0
@@ -2226,7 +2260,7 @@ enum ENUM_INIT_RETCODE
 #define SymbolName() 0
 #define SymbolSelect() 0
 #define SymbolsTotal() 0
-#define tan() 0
+// #define tan() 0
 #define TerminalClose() 0
 #define TerminalInfoDouble() 0
 #define TerminalInfoInteger() 0
