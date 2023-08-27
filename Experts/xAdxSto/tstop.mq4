@@ -269,7 +269,8 @@ void OnTick()
 
     if (update_stop)
     {
-        const double new_tp = getStopoff(tp_points, __tsl_lots__);
+        const double tp_stop = getStopoff(tp_points, __tsl_lots__);
+        const double new_tp = NormalizeDouble(opened_sell ? Bid - tp_stop : Ask + tp_stop, Digits);
 
         printf("Updating order (trailing stop) %d : SL  %f => %f, TP %f => %f", ticket, opened_sl, new_sl, opened_tp, new_tp);
         printf("Ask %f, Bid %f, TSL %f, TPL %f, Order opened price %f, tsl_stop %f", Ask, Bid, ts_points, tp_points, opened_price, tsl_stop);
