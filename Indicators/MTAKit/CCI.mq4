@@ -8,7 +8,7 @@
 
 #property description "Commodity Channel Index"
 
-#property indicator_buffers 2
+#property indicator_buffers 3
 
 #property indicator_separate_window
 
@@ -28,10 +28,9 @@
 #property indicator_levelcolor clrDimGray
 */
 
-extern const int cci_mean_period = 20;                          // Mean Period
+extern const int cci_mean_period = 14;                          // Mean Period
 extern const int cci_signal_period = 9;                         // Signal Period
 extern const ENUM_APPLIED_PRICE cci_price_mode = PRICE_TYPICAL; // Price Mode
-extern const double cci_factor = 0.15;                          // CCI Scale factor
 
 #include <../Libraries/libMTA/libCCI.mq4>
 
@@ -39,9 +38,10 @@ CCIData *cci_in;
 
 int OnInit()
 {
-    cci_in = new CCIData(cci_mean_period, cci_signal_period, cci_price_mode, cci_factor, _Symbol, _Period);
+    cci_in = new CCIData(cci_mean_period, cci_signal_period, cci_price_mode, _Symbol, _Period);
 
-    if (cci_in.initIndicator() == -1) {
+    if (cci_in.initIndicator() == -1)
+    {
         return INIT_FAILED;
     }
     return INIT_SUCCEEDED;
@@ -58,7 +58,7 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-   return cci_in.calculate(rates_total, prev_calculated);
+    return cci_in.calculate(rates_total, prev_calculated);
 }
 
 void OnDeinit(const int dicode)
