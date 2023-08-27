@@ -86,7 +86,8 @@ public:
         return is_max;
     }
 
-    virtual T minmaxVal() {
+    virtual T minmaxVal()
+    {
         return minmax;
     }
 
@@ -95,6 +96,16 @@ public:
         minmax = extval;
         is_max = max_p;
         TrendBase<T>::bind(near, far, near_t, far_t);
+        return true;
+    }
+
+    virtual bool bind(T extval, bool max_p, datetime near_t)
+    {
+        // alternate usage: "near" as comprising the value at the minimum/maximum,
+        // near_t representing the chart time at that inflection point
+        minmax = extval;
+        is_max = max_p;
+        TrendBase<T>::bind(extval, EMPTY_VALUE, near_t, EMPTY);
         return true;
     }
 };
@@ -113,7 +124,17 @@ public:
         return near_b;
     };
 
+    T nearValB() const
+    {
+        return near_b;
+    };
+
     T farValB()
+    {
+        return far_b;
+    }
+
+    T farValB() const
     {
         return far_b;
     }
@@ -132,10 +153,9 @@ public:
         return TrendBase<T>::bind(_near_a, _far_a, near_t, far_t);
     }
 
-    
     virtual bool bind(const T &data_a[], const T &data_b[], Chartable &chartinfo, const int start = 0, const int far = EMPTY)
     {
-        const int last = (far == EMPTY ?  fmin(ArraySize(data_a), ArraySize(data_b)) - 1 : far);
+        const int last = (far == EMPTY ? fmin(ArraySize(data_a), ArraySize(data_b)) - 1 : far);
 
         bool found = false;
         double a_cur, b_cur;
@@ -181,7 +201,6 @@ public:
         return false;
     };
 
-
     virtual T rate()
     {
         // determine the effective level of +DI/-DI crossover,
@@ -225,6 +244,28 @@ public:
         const T shifted_val = (slope_p * xover_dt) + a_bgn;
         return shifted_val + val_shift;
     }
+
+    virtual T strength()
+    {
+        const T near_diff = far_a - far_b;
+        const T far_diff = near_a - near_b;
+        if (dblZero(far_diff) || dblZero(near_diff))
+        {
+            return DBLZERO;
+        }
+        return fabs((T)near_diff / (T)far_diff);
+    }
+
+    virtual T strength() const
+    {
+        const T near_diff = far_a - far_b;
+        const T far_diff = near_a - near_b;
+        if (dblZero(far_diff) || dblZero(near_diff))
+        {
+            return DBLZERO;
+        }
+        return fabs((T)near_diff / (T)far_diff);
+    }
 };
 
 class PriceXOver : public CrossoverBase<double>
@@ -233,12 +274,13 @@ protected:
     bool _bearish;
 
 public:
-
-    virtual bool bearish() {
+    virtual bool bearish()
+    {
         return _bearish;
     }
 
-    virtual void setBearish(const bool bearish_p) {
+    virtual void setBearish(const bool bearish_p)
+    {
         _bearish = bearish_p;
     }
 
@@ -249,12 +291,124 @@ public:
         setBearish(bearish_p);
         return true;
     }
-
 };
 
 class PriceReversal : public ReversalBase<double>
 {
 public:
+    /// Implementation Notes:
+    ///
+    /// The following will not detect a min/max unless it occurs at a point of
+    /// indicator rate reversal.
+    ///
+    /// Testing scripts are avaialble under the scripts dir
+
+    bool bindMax(ValueBuffer<double> &buffer, Chartable &chartinfo, const int begin = 0, const int end = EMPTY, const double limit = DBL_MAX)
+    {
+
+        const int maxend = buffer.getExtent() - 1;
+        const int earliest = end == EMPTY ? maxend : fmin(end, maxend);
+        // DEBUG("Check max to %d", earliest);
+
+        double max = DBL_MAX;
+        int max_shift = EMPTY;
+        bool max_reversal_p = false;
+
+        int early_idx = begin;
+        double pre = buffer.get(early_idx++);
+        if (early_idx == earliest)
+        {
+            return false;
+        }
+        double mid = buffer.get(early_idx++);
+        if (early_idx == earliest)
+        {
+            return false;
+        }
+        for (; early_idx <= earliest; early_idx++)
+        {
+            // DEBUG("Check max at %d", early_idx - 1);
+            const double earlier = buffer.get(early_idx);
+            if (max == EMPTY_VALUE)
+            {
+                max = DBL_MAX;
+                max_shift = EMPTY;
+            }
+            else if (mid == EMPTY_VALUE)
+            {
+            }
+            if ((earlier <= mid) && (mid >= pre) && ((mid >= max) || (max == DBL_MAX)) && (limit == DBL_MAX || mid >= limit) && mid != EMPTY_VALUE)
+            {
+                max_reversal_p = (max != DBL_MAX); // state flag
+                max = mid;
+                max_shift = early_idx - 1; // index for mid
+            }
+            else if (((limit != DBL_MAX && max >= limit) || (limit == DBL_MAX)) && mid < max && max_reversal_p && max != DBL_MAX && mid != EMPTY_VALUE)
+            {
+                break;
+            }
+            pre = mid;
+            mid = earlier;
+        }
+        if (max_shift == EMPTY)
+            return false;
+        bind(max, true, offset_time(max_shift, chartinfo.getSymbol(), chartinfo.getTimeframe()));
+        return true;
+    }
+
+    bool bindMin(ValueBuffer<double> &buffer, Chartable &chartinfo, const int begin = 0, const int end = EMPTY, const double limit = DBL_MIN)
+    {
+
+        const int maxend = buffer.getExtent() - 1;
+        const int earliest = end == EMPTY ? maxend : fmin(end, maxend);
+        // DEBUG("Check min to %d", earliest);
+
+        double min = DBL_MIN;
+        int min_shift = EMPTY;
+        bool min_reversal_p = false;
+
+        int early_idx = begin;
+        double pre = buffer.get(early_idx++);
+        if (early_idx == earliest)
+        {
+            return false;
+        }
+        double mid = buffer.get(early_idx++);
+        if (early_idx == earliest)
+        {
+            return false;
+        }
+        for (; early_idx <= earliest; early_idx++)
+        {
+            if (min == EMPTY_VALUE)
+            {
+                min = DBL_MIN;
+                min_shift = EMPTY;
+            }
+            else if (mid == EMPTY_VALUE)
+            {
+            }
+
+            // DEBUG("Check min at %d", early_idx - 1);
+            const double earlier = buffer.get(early_idx);
+            if ((earlier >= mid) && (mid <= pre) && ((mid <= min) || (min == DBL_MIN)) && (limit == DBL_MIN || mid <= limit) && mid != EMPTY_VALUE)
+            {
+                min_reversal_p = (min != DBL_MIN); // state flag
+                min = mid;
+                min_shift = early_idx - 1; // index for mid
+            }
+            else if (((limit != DBL_MIN && min <= limit) || (limit == DBL_MIN)) && mid > min && min_reversal_p && min != DBL_MIN && mid != EMPTY_VALUE)
+            {
+                break;
+            }
+            pre = mid;
+            mid = earlier;
+        }
+        if (min_shift == EMPTY)
+            return false;
+        bind(min, false, offset_time(min_shift, chartinfo.getSymbol(), chartinfo.getTimeframe()));
+        return true;
+    }
 };
 
 class VolReversal : public ReversalBase<long>
